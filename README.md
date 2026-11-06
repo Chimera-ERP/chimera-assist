@@ -1,0 +1,146 @@
+# Chimera Assist
+
+Status: initial Android implementation; not published or device accepted.
+Owner: Chimera mobile and ERP maintainers. Android ID: `ro.chimeraerp.assist`.
+Business contract: [MDM-AST-001](../../docs/business-rules/master-data.md#assist-phone-discovery).
+Current work and evidence remain in the ERP [handoff](../../docs/development/verification-checklist.md#android-identity-and-chimera-assist--2026-11-05).
+
+## First version
+
+The user enters their HTTPS ERP address and selects **Continue with Chimera in
+browser**. The app obtains tenant metadata directly from
+`https://auth.chimeraerp.ro/auth/browser/native-config`, then AppAuth opens the
+system browser/Custom Tab at that authority. Local credentials and configured
+enterprise SSO are handled by the existing central login page. Assist has no
+password form, WebView, client secret or direct `/auth/login` call.
+
+Authorization Code + S256 PKCE, state and nonce bind the return to the initiating
+app and tenant. The only registered callback is
+`ro.chimeraerp.assist:/oauth2redirect`; it carries a one-use code, never a token.
+The client ID is `<registered-ERP-origin>/native/assist`. Unknown ERP origins,
+foreign tenants and configurable callback URLs are rejected by Auth. The app pins
+the central HTTPS authority and tenant discovery/endpoints, checks the returned
+organization claim and consumes its pending request once within ten minutes.
+AppAuth validates the ID-token issuer/audience/time/nonce using the HTTPS token
+response. Pending PKCE material survives Android activity/process recreation in
+Keystore-encrypted storage; an interrupted token exchange requires a new login.
+
+Sessions and pending requests use separate authenticated AES-GCM envelopes, with
+backup disabled. Passwords, the address book, phone history and business responses
+are not stored. Logout stops the helper and clears the local session and pending
+login; the central browser session remains governed by Auth. The existing Auth
+policy applies: access tokens last 15 minutes, without refresh/offline grants.
+A rejected session stops the helper and requires browser login again; an existing
+central browser session can satisfy that login. Permissions remain server checked.
+
+Setup requests the system caller-ID role and permission to display over other
+apps. Optional Contacts permission lets Android deliver calls from numbers in the
+phone's address book; the app never queries the address book. Notification
+permission is requested on Android13+. Activation from the visible screen starts
+a user-visible `specialUse` foreground service. A persistent notification provides
+a stop action. There is no boot receiver, default-dialer replacement, call-log
+permission, microphone access, accessibility service or call recording.
+
+`CallScreeningService` immediately allows an incoming call, without waiting for
+network I/O. The already activated service performs an exact, authenticated ERP
+lookup. It clears earlier call context before every lookup; late replies cannot
+replace a newer call or a different session. A recognized partner displays the
+Chimera logo bubble. Drag to reposition and tap to expand; long press or Close dismisses it. More than
+one partner requires a choice. Supplier actions read supplier invoices, recorded
+payments and active supplied products. Client actions read location-scoped
+invoices, permitted invoice/standalone payments and products appearing on issued
+invoices. Amounts come from stored documents or existing supplier routines.
+No payment, invoice, order or external message is created.
+
+The panel offers the existing permitted actions; tapping one opens native lists
+with25 rows per page, loading/error/retry/empty states. Manual number lookup is
+available from the home screen. UI text is English/Romanian according to Android
+locale. The logo is the existing Chimera artwork copied from Companion's
+`design/companion-motion/chimera.png`, not a replacement brand asset.
+
+## Boundaries and device acceptance
+
+Android10+ (API29), target36. Enable the helper again after force-stop, reboot or
+OS process termination. It intentionally does not attempt a restricted background
+foreground-service launch. Incoming calls only; hidden numbers and non-telephony
+calls are not identified. Offline or unknown callers produce no bubble. One app
+can hold the caller-ID role at a time. The bubble is not shown over the lock screen
+and is removed on screen-off, dismissal, a new call, logout, service stop or after
+five minutes. Telecom screening does not expose a call-ended event; this version
+uses explicit dismissal/expiry instead. Expanded panels have a bounded scroll area.
+No identity or financial content appears in the notification or recent-app capture.
+
+Numbers in national format are interpreted as Romanian; other countries require
+an international prefix. There is no cross-company matching or peer-system data
+exchange. Shared numbers return up to20 permitted partners with `has_more`.
+Unassigned-location client documents are excluded, not treated as globally visible.
+Phone identity is a navigation hint, never proof of the caller's identity.
+
+Physical phone acceptance must cover the actual dialer/OEM and Android version,
+saved/unsaved contacts, dual SIM, denied permissions, locked/unlocked screen,
+background/process death, two rapid calls, lost network, permission/session
+revocation and narrow/landscape/text-scale UI states. A debug APK/unit test is not
+evidence that Android displayed the overlay during a real call. No physical call,
+installation, store publication or production migration is part of this change.
+
+## Build and backend
+
+Use Java17 and an Android SDK containing platform36:
+
+```sh
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+```
+
+Set `JAVA_HOME`/`ANDROID_HOME` for your machine; do not commit `local.properties`,
+keystores or credentials. Output: `app/build/outputs/apk/debug/app-debug.apk`.
+Release signing/distribution is not configured. Gradle wrapper9.1.0 is reused from
+Companion; Android Gradle Plugin9.0.1 supplies built-in Kotlin support. No Flutter
+or hardware adapter dependency is included.
+
+ERP migration `sql/323_assist.sql` adds indexed phone normalization and read-only
+domain functions; all three core install paths include it. Apply through the
+normal release migration process before using the app against an existing ERP.
+Auth must run the existing standard OIDC provider with `AUTH_OIDC_ENABLED=true`,
+`AUTH_BROWSER_LOGIN_ORIGIN=https://auth.chimeraerp.ro` and this ERP's exact origin
+in `AUTH_BROWSER_CLIENT_ORIGINS`, bound to the active organization in `auth.login_hosts`.
+Apply Auth-owned `sql/20261105_assist_browser_login.sql` after the OIDC migration;
+fresh Auth init includes it. Deploy Auth routes/provider changes with that migration.
+The public `/auth/browser/native-config` and tenant `/auth/oidc/*` routes must reach
+Auth at the central host. Missing configuration fails closed with an app error.
+ERP must accept the tenant OIDC issuer as documented in
+[Enterprise SSO](../../docs/integrations/enterprise-sso.md). Android uses
+`net.openid:appauth:0.11.1` for the native browser flow. Phone lookup is POST, so phone numbers
+do not enter ordinary query-string access logs; responses use `private, no-store`.
+
+From the ERP root:
+
+```sh
+npm test -- --runTestsByPath src/routes/assist.test.ts src/routes/companion-updates.test.ts
+node scripts/test-assist.mjs
+npm run typecheck
+npm run quality:sql
+npm run quality:check
+```
+
+The SQL test clones local schema only, inserts synthetic fixtures, applies323
+twice to test reproducibility, and removes the disposable database.
+
+Auth browser regression, from the Auth repository:
+
+```sh
+npm run build
+npx --yes --package=node@22 node scripts/test-enterprise-oidc.mjs
+npm run quality:check
+```
+
+The shared synthetic OIDC runner covers native password/enterprise flows, exact
+redirects, mandatory PKCE, wrong verifier, replay, disabled runtime, tenant and
+revoked-account rejection. Android unit tests cover endpoint/state/expiry bounds;
+real browser-to-app return, cancellation, process death and OEM browser behavior
+still require an Android device/emulator trial.
+
+Platform references: [Android caller identification](https://developer.android.com/reference/android/telecom/CallScreeningService),
+[foreground-service restrictions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start),
+[special-use foreground services](https://developer.android.com/develop/background-work/services/fgs/service-types#special-use).
+Browser authentication follows [AppAuth Android](https://github.com/openid/AppAuth-Android)
+and [RFC8252](https://www.rfc-editor.org/rfc/rfc8252.html).
