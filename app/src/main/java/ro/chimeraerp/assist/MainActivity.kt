@@ -6,12 +6,16 @@ import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
 import android.view.View
+import android.view.Gravity
 import android.view.WindowManager
 import android.widget.*
 import java.util.concurrent.Executors
@@ -24,13 +28,22 @@ class MainActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private var generation = 0
     private var busy = false
+    private var enterprise = false
+    private var enterpriseAddress = ""
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         store = SessionStore(this)
         browserLogin = BrowserLogin(this)
+        enterprise = state?.getBoolean("enterprise") ?: false
+        enterpriseAddress = state?.getString("enterprise_address") ?: ""
         home()
+    }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("enterprise", enterprise)
+        outState.putString("enterprise_address", enterpriseAddress)
+        super.onSaveInstanceState(outState)
     }
     override fun onResume() {
         super.onResume()
@@ -52,7 +65,7 @@ class MainActivity : Activity() {
         if (resultCode != RESULT_OK || data == null || pending == null) return
         busy = true; message.text = getString(R.string.loading)
         val request = ++generation
-        browserLogin.finish(data, pending) { session, error ->
+        worker.execute { browserLogin.finish(data, pending) { session, error ->
             runOnUiThread {
                 if (!isFinishing && request == generation) {
                     busy = false
@@ -60,7 +73,7 @@ class MainActivity : Activity() {
                     else message.text = getString(R.string.login_failed)
                 }
             }
-        }
+        } }
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun page(title: String) {
@@ -122,26 +135,10 @@ class MainActivity : Activity() {
         }
     }
     private fun home() {
+        val session = store.read()
+        if (session == null) { welcome(); return }
         page(getString(R.string.app_name))
         label(getString(R.string.tagline))
-        val session = store.read()
-        if (session == null) {
-            label(getString(R.string.login_intro))
-            val origin = field(R.string.erp_address, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-            val message = label("")
-            button(getString(R.string.sign_in)) {
-                val url = origin.text.toString().trim()
-                load(message, { browserLogin.prepare(url) }) { pending ->
-                    try {
-                        stopService(Intent(this, AssistService::class.java))
-                        store.begin(pending)
-                        startActivityForResult(browserLogin.intent(pending), 100)
-                        message.text = getString(R.string.login_browser)
-                    } catch (_: Exception) { store.takePending(); message.text = getString(R.string.browser_unavailable) }
-                }
-            }
-            return
-        }
         label(session.organization, 20)
         label(session.origin, 13)
         status = label("")
@@ -172,6 +169,58 @@ class MainActivity : Activity() {
         }
         button(getString(R.string.sign_out)) { stopService(Intent(this, AssistService::class.java)); store.clear(); home() }
         updateStatus()
+    }
+    private fun welcome() {
+        page("")
+        content.removeAllViews()
+        content.gravity = Gravity.CENTER
+        content.addView(ImageView(this).apply {
+            setImageResource(R.drawable.chimera_logo)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(112), dp(112)).apply { bottomMargin = dp(24) })
+        label(getString(R.string.welcome), 28).gravity = Gravity.CENTER
+        label(getString(R.string.tagline)).apply { gravity = Gravity.CENTER; setTextColor(Color.rgb(99, 102, 118)) }
+        label(getString(if (enterprise) R.string.enterprise_server else R.string.cloud), 14).apply {
+            gravity = Gravity.CENTER; setPadding(0, dp(28), 0, dp(12))
+        }
+        val origin = if (enterprise) field(R.string.erp_address, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, enterpriseAddress).apply {
+            hint = "https://chimera.firma.ro"
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { enterpriseAddress = s.toString() }
+                override fun afterTextChanged(s: android.text.Editable?) {}
+            })
+        } else null
+        val message = TextView(this).apply {
+            gravity = Gravity.CENTER; accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+            setTextColor(Color.rgb(99, 102, 118)); setPadding(0, dp(16), 0, 0)
+        }
+        button(getString(R.string.sign_in)) {
+            val url = origin?.text?.toString()?.trim()
+            load(message, { if (url == null) browserLogin.prepareCloud() else browserLogin.prepare(url) }) { pending ->
+                try {
+                    stopService(Intent(this, AssistService::class.java))
+                    store.begin(pending)
+                    startActivityForResult(browserLogin.intent(pending), 100)
+                    message.text = getString(R.string.login_browser)
+                } catch (_: Exception) { store.takePending(); message.text = getString(R.string.browser_unavailable) }
+            }
+        }.apply {
+            background = RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), GradientDrawable().apply {
+                setColor(Color.rgb(81, 68, 211)); cornerRadius = dp(12).toFloat()
+            }, null)
+            elevation = 0f; stateListAnimator = null
+            setTextColor(Color.WHITE); minHeight = dp(56)
+        }
+        button(getString(if (enterprise) R.string.use_cloud else R.string.enterprise_option)) {
+            enterprise = !enterprise; welcome()
+        }.apply {
+            val selectable = android.util.TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackground, selectable, true)
+            setBackgroundResource(selectable.resourceId)
+            elevation = 0f; stateListAnimator = null; setTextColor(Color.rgb(81, 68, 211))
+        }
+        content.addView(message, LinearLayout.LayoutParams(-1, -2))
     }
     private fun ready(): Boolean = Settings.canDrawOverlays(this) && getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING)
     private fun updateStatus() {

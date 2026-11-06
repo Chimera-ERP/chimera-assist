@@ -23,19 +23,30 @@ same certificate and can update in place. Android package: `ro.chimeraerp.assist
 
 ## First version
 
-The user enters their HTTPS ERP address and selects **Continue with Chimera in
-browser**. The app obtains tenant metadata directly from
-`https://auth.chimeraerp.ro/auth/browser/native-config`, then AppAuth opens the
-system browser/Custom Tab at that authority. Local credentials and configured
-enterprise SSO are handled by the existing central login page. Assist has no
-password form, WebView, client secret or direct `/auth/login` call.
+The welcome screen defaults to **Chimera Cloud** with a **Log in** button.
+No ERP address is required. Auth opens in the system browser at
+`https://auth.chimeraerp.ro`; its company chooser lists active registered,
+allowlisted ERP hosts and starts the existing tenant login. Auth returns the
+one-use authorization code directly to Assist.
+
+**Enterprise / Self-hosted** reveals a server-address field. That explicitly
+chosen ERP's browser configuration supplies its HTTPS Auth authority, which
+Assist pins for discovery and token exchange. Users can switch back to Cloud.
+Local credentials and configured enterprise SSO stay in the existing browser
+login page. Assist has no password form, WebView or client secret.
+
+Cloud tenant selection is bound to the initiating state, nonce, S256 challenge
+and an HttpOnly browser cookie. After returning, the app resolves that choice
+once with its original verifier, then uses the standard tenant token endpoint.
+The encrypted request owns all proofs; callback URLs cannot select a tenant or
+an ERP. Selection expires after ten minutes and cannot change company once set.
 
 Authorization Code + S256 PKCE, state and nonce bind the return to the initiating
 app and tenant. The only registered callback is
 `ro.chimeraerp.assist:/oauth2redirect`; it carries a one-use code, never a token.
 The client ID is `<registered-ERP-origin>/native/assist`. Unknown ERP origins,
 foreign tenants and configurable callback URLs are rejected by Auth. The app pins
-the central HTTPS authority and tenant discovery/endpoints, checks the returned
+the initiating HTTPS authority and tenant discovery/endpoints, checks the returned
 organization claim and consumes its pending request once within ten minutes.
 AppAuth validates the ID-token issuer/audience/time/nonce using the HTTPS token
 response. Pending PKCE material survives Android activity/process recreation in
@@ -96,8 +107,8 @@ Physical phone acceptance must cover the actual dialer/OEM and Android version,
 saved/unsaved contacts, dual SIM, denied permissions, locked/unlocked screen,
 background/process death, two rapid calls, lost network, permission/session
 revocation and narrow/landscape/text-scale UI states. A debug APK/unit test is not
-evidence that Android displayed the overlay during a real call. No physical call,
-installation, store publication or production migration is part of this change.
+evidence that Android displayed the overlay during a real call. Physical-call and OEM acceptance remain required; release checks and emulator
+trials do not replace them.
 
 ## Build and backend
 
@@ -119,8 +130,10 @@ normal release migration process before using the app against an existing ERP.
 Auth must run the existing standard OIDC provider with `AUTH_OIDC_ENABLED=true`,
 `AUTH_BROWSER_LOGIN_ORIGIN=https://auth.chimeraerp.ro` and this ERP's exact origin
 in `AUTH_BROWSER_CLIENT_ORIGINS`, bound to the active organization in `auth.login_hosts`.
-Apply Auth-owned `sql/20261105_assist_browser_login.sql` after the OIDC migration;
-fresh Auth init includes it. Deploy Auth routes/provider changes with that migration.
+Apply Auth-owned `sql/20261105_assist_browser_login.sql` after the OIDC migration,
+then `sql/20261106_assist_cloud_login.sql`; fresh Auth init includes both.
+`AUTH_OIDC_WEB_LOGIN_ENABLED=false` may preserve the existing web flow during
+native activation; ERP APIs must still trust the configured OIDC authority. Deploy Auth routes/provider changes with that migration.
 The public `/auth/browser/native-config` and tenant `/auth/oidc/*` routes must reach
 Auth at the central host. Missing configuration fails closed with an app error.
 ERP must accept the tenant OIDC issuer as documented in
@@ -185,7 +198,7 @@ npm run quality:check
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 # With the four ASSIST signing environment values supplied securely:
 ./gradlew :app:assembleRelease
-gh attestation verify chimera-assist-0.1.1.apk --repo Chimera-ERP/chimera-assist
+gh attestation verify chimera-assist-0.1.2.apk --repo Chimera-ERP/chimera-assist
 ```
 
 An interrupted release remains a draft and must be reconciled before retrying.

@@ -11,8 +11,9 @@ data class Lookup(val partners: List<Partner>, val hasMore: Boolean)
 
 object Api {
     fun request(origin: String, path: String, token: String? = null, body: JSONObject? = null): JSONObject {
-        require(path.startsWith("/api/") || (origin == BrowserPolicy.AUTH_ORIGIN &&
-            (path.startsWith("/auth/browser/native-config?") || path.startsWith("/auth/oidc/"))))
+        require(path.startsWith("/api/") || (token == null &&
+            (path.startsWith("/auth/browser/native-config?") || path.startsWith("/auth/oidc/") ||
+             path in listOf("/auth/browser/assist/start", "/auth/browser/assist/resolve"))))
         val connection = URL(Endpoint.origin(origin) + path).openConnection() as HttpsURLConnection
         try {
             connection.instanceFollowRedirects = false

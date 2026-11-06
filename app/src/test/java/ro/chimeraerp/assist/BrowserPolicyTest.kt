@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BrowserPolicyTest {
+    @Test fun enterpriseAuthorityMustBeExplicitAndRemainPinned() {
+        val authority = "https://auth.company.test:8443"
+        val issuer = BrowserPolicy.issuer("tenant-a", authority)
+        BrowserPolicy.endpoint("$issuer/token", issuer, authority)
+        assertThrows(IllegalArgumentException::class.java) { BrowserPolicy.endpoint("$issuer/token", issuer) }
+        assertThrows(IllegalArgumentException::class.java) { BrowserPolicy.endpoint("${BrowserPolicy.AUTH_ORIGIN}/auth/oidc/tenant-a/token", issuer, authority) }
+        assertThrows(IllegalArgumentException::class.java) { BrowserPolicy.issuer("tenant-a", "http://auth.company.test") }
+    }
     @Test fun pinsAuthorityAndTenantEndpoints() {
         val issuer = BrowserPolicy.issuer("tenant-a")
         BrowserPolicy.endpoint("$issuer/token", issuer)

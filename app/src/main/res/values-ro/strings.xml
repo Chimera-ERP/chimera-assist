@@ -2,9 +2,8 @@
     <string name="setup_status">%1$s\n%2$s</string>
     <string name="app_name">Chimera Assist</string>
     <string name="tagline">Contextul afacerii tale, când sună telefonul.</string>
-    <string name="login_intro">Continuă în browser pe auth.chimeraerp.ro. Adresa ERP identifică firma. Assist consultă doar partenerii și documentele la care ai acces.</string>
-    <string name="erp_address">Adresa ERP (https://…)</string>
-    <string name="sign_in">Continuă cu Chimera în browser</string>
+    <string name="erp_address">Adresa serverului Chimera</string>
+    <string name="sign_in">Autentificare</string>
     <string name="sign_out">Ieșire și ștergere sesiune</string>
     <string name="caller_role">1 · Alege Assist pentru identificarea apelantului</string>
     <string name="overlay_permission">2 · Permite afișarea peste alte aplicații</string>
@@ -22,8 +21,8 @@
     <string name="phone">Număr de telefon (+40… sau 07…)</string>
     <string name="lookup">Caută în Chimera</string>
     <string name="loading">Se încarcă…</string>
-    <string name="network_error">ERP-ul nu este disponibil. Verifică adresa și conexiunea, apoi reîncearcă.</string>
-    <string name="invalid_input">Verifică adresa HTTPS și datele introduse. Folosește numărul complet de telefon.</string>
+    <string name="network_error">Serviciul nu este disponibil. Verifică conexiunea și reîncearcă.</string>
+    <string name="invalid_input">Verifică datele introduse. Folosește numărul complet de telefon.</string>
     <string name="session_expired">Autentifică-te din nou. Sesiunea nu mai este disponibilă sau datele au fost respinse.</string>
     <string name="forbidden">Contul tău nu are acces la această acțiune.</string>
     <string name="partners">Parteneri</string>
@@ -49,6 +48,11 @@
     <string name="login_browser">Finalizează autentificarea în browser, apoi revino în Assist.</string>
     <string name="login_cancelled">Autentificarea a fost anulată sau a expirat. Poți reîncerca.</string>
     <string name="login_failed">Autentificarea nu s-a finalizat. Pornește din nou din Assist.</string>
-    <string name="login_unavailable">Autentificarea prin browser nu este încă activată pentru acest ERP. Contactează administratorul.</string>
+    <string name="login_unavailable">Autentificarea prin browser nu este disponibilă momentan. Reîncearcă în curând.</string>
     <string name="browser_unavailable">Nu există un browser compatibil disponibil. Instalează sau activează un browser și reîncearcă.</string>
+    <string name="welcome">Bun venit în Chimera Assist</string>
+    <string name="cloud">Chimera Cloud</string>
+    <string name="enterprise_server">Serverul tău Chimera</string>
+    <string name="enterprise_option">Enterprise / Self-hosted</string>
+    <string name="use_cloud">Folosește Chimera Cloud</string>
 </resources>
