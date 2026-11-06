@@ -1,9 +1,25 @@
 # Chimera Assist
 
-Status: initial Android implementation; not published or device accepted.
+Status: Android test releases; physical-device acceptance remains pending.
 Owner: Chimera mobile and ERP maintainers. Android ID: `ro.chimeraerp.assist`.
-Business contract: [MDM-AST-001](../../docs/business-rules/master-data.md#assist-phone-discovery).
-Current work and evidence remain in the ERP [handoff](../../docs/development/verification-checklist.md#android-identity-and-chimera-assist--2026-11-05).
+Business contract: [MDM-AST-001](https://github.com/Chimera-ERP/chimera/blob/main/docs/business-rules/master-data.md#assist-phone-discovery).
+Current work and evidence remain in the ERP [handoff](https://github.com/Chimera-ERP/chimera/blob/main/docs/development/verification-checklist.md#android-identity-and-chimera-assist--2026-11-05).
+
+
+## Download and repository
+
+This is the standalone **Chimera Assist** repository:
+[Chimera-ERP/chimera-assist](https://github.com/Chimera-ERP/chimera-assist).
+Android downloads: [latest release](https://github.com/Chimera-ERP/chimera-assist/releases/latest).
+The application source was extracted with its history from ERP's former
+`apps/chimera-assist` directory. ERP API/SQL and central Auth remain in their owning
+repositories; they are not bundled into this Android repository.
+
+The release APK uses a dedicated persistent signing identity. If you installed a
+previous locally signed debug APK, uninstall that debug build once before the
+first release APK; Android cannot update across different certificates. This
+clears only the app's local session/settings. Subsequent release APKs retain the
+same certificate and can update in place. Android package: `ro.chimeraerp.assist`.
 
 ## First version
 
@@ -93,7 +109,7 @@ Use Java17 and an Android SDK containing platform36:
 
 Set `JAVA_HOME`/`ANDROID_HOME` for your machine; do not commit `local.properties`,
 keystores or credentials. Output: `app/build/outputs/apk/debug/app-debug.apk`.
-Release signing/distribution is not configured. Gradle wrapper9.1.0 is reused from
+Release signing and publication use the dedicated GitHub Actions workflow below. Gradle wrapper9.1.0 is reused from
 Companion; Android Gradle Plugin9.0.1 supplies built-in Kotlin support. No Flutter
 or hardware adapter dependency is included.
 
@@ -108,7 +124,7 @@ fresh Auth init includes it. Deploy Auth routes/provider changes with that migra
 The public `/auth/browser/native-config` and tenant `/auth/oidc/*` routes must reach
 Auth at the central host. Missing configuration fails closed with an app error.
 ERP must accept the tenant OIDC issuer as documented in
-[Enterprise SSO](../../docs/integrations/enterprise-sso.md). Android uses
+[Enterprise SSO](https://github.com/Chimera-ERP/chimera/blob/main/docs/integrations/enterprise-sso.md). Android uses
 `net.openid:appauth:0.11.1` for the native browser flow. Phone lookup is POST, so phone numbers
 do not enter ordinary query-string access logs; responses use `private, no-store`.
 
@@ -144,3 +160,33 @@ Platform references: [Android caller identification](https://developer.android.c
 [special-use foreground services](https://developer.android.com/develop/background-work/services/fgs/service-types#special-use).
 Browser authentication follows [AppAuth Android](https://github.com/openid/AppAuth-Android)
 and [RFC8252](https://www.rfc-editor.org/rfc/rfc8252.html).
+
+## Automated Android releases
+
+Like Companion, pushes and pull requests run verification. A new stable
+`versionName` and increasing `versionCode` in `app/build.gradle.kts` on `main`
+build and publish a signed release after unit tests, Android lint and package /
+version / certificate checks. The workflow pins its actions, Java17, Android36
+and Gradle wrapper. Commits without a new version do not replace a published APK.
+Releases contain the APK, `assist-update.json`, `SHA256SUMS` and a GitHub build
+attestation. Assist currently installs updates manually from Releases; an in-app
+updater is not implemented.
+
+Four encrypted repository secrets (`ASSIST_KEYSTORE_BASE64`,
+`ASSIST_KEYSTORE_PASSWORD`, `ASSIST_KEY_ALIAS`, `ASSIST_KEY_PASSWORD`) restore the
+persistent release key only for the main-branch release job. PRs cannot publish
+or access it. Release builds fail without the key; there is no debug fallback.
+Never commit, regenerate or rotate the key for an existing installation. The
+expected certificate SHA256 is `23ff3ea173fdb9ca050af2099b922bacd2ddbb71a4194d4d875bf2ccdf79aad4`.
+
+```sh
+npm test
+npm run quality:check
+./gradlew :app:testDebugUnitTest :app:lintDebug
+# With the four ASSIST signing environment values supplied securely:
+./gradlew :app:assembleRelease
+gh attestation verify chimera-assist-0.1.1.apk --repo Chimera-ERP/chimera-assist
+```
+
+An interrupted release remains a draft and must be reconciled before retrying.
+Backend readiness and the physical-phone acceptance checklist above still apply.

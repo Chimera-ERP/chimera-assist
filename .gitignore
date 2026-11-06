@@ -4,3 +4,11 @@ build/
 local.properties
 *.jks
 *.keystore
+*.p12
+*.apk
+*.aab
+.quality-receipts/
+release/
+node_modules/
+.DS_Store
+*.log

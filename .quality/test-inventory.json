@@ -1,0 +1,61 @@
+{
+  "version": 2,
+  "repository": "chimera-assist",
+  "tests": [
+    {
+      "id": "chimera-assist:bea59f405fa1253f2fd7",
+      "repository": "chimera-assist",
+      "source": "app/src/test/java/ro/chimeraerp/assist/BrowserPolicyTest.kt",
+      "title": "BrowserPolicyTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Reject altered issuer/tenant endpoints and missing, wrong or expired callback state",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Pure Android boundary tests; no physical call or browser return acceptance"
+      ]
+    },
+    {
+      "id": "chimera-assist:f3194fa8f61dd92fe92d",
+      "repository": "chimera-assist",
+      "source": "app/src/test/java/ro/chimeraerp/assist/EndpointTest.kt",
+      "title": "EndpointTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Reject unsafe ERP origins and partner document paths",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Pure Android boundary tests; no physical call or browser return acceptance"
+      ]
+    },
+    {
+      "id": "chimera-assist:5ed812080811a53b78ba",
+      "repository": "chimera-assist",
+      "source": "tool/release.test.mjs",
+      "title": "release.test.mjs",
+      "line": 1,
+      "discovery": "file-unresolved",
+      "runner": "node:test",
+      "level": "contract",
+      "behavior": "Stable unambiguous Android versions, exact release package/certificate, hash/source-bound public download metadata",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "npm test",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Synthetic badging/signature fixtures; actual APK independently checked before publication",
+        "Dynamic case names require runner discovery; no executable case is inferred."
+      ]
+    }
+  ]
+}

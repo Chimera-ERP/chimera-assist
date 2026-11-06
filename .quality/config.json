@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "repository": "chimera-assist",
+  "authority": "../chimera",
+  "runner": "node:test",
+  "foreignCommands": [
+    "typecheck",
+    "quality:sql",
+    "build"
+  ],
+  "localGuidance": "Native Kotlin Android caller helper. ERP owns business data and SQL; Auth owns browser identity. Preserve PKCE, tenant scope, foreground/lock-screen boundaries and release signing identity. Read README.md. Commands: ./gradlew :app:testDebugUnitTest :app:lintDebug, npm test, npm run quality:check. Real-device and incoming-call acceptance is separate from automated tests.",
+  "documents": {
+    "README.md": {
+      "classification": "current",
+      "owner": "Chimera mobile maintainers",
+      "purpose": "Android app, server prerequisites, release and acceptance contract"
+    },
+    "AGENTS.md": {
+      "classification": "current",
+      "owner": "Chimera mobile maintainers",
+      "purpose": "Generated development contract"
+    },
+    "CLAUDE.md": {
+      "classification": "current",
+      "owner": "Chimera mobile maintainers",
+      "purpose": "Development contract pointer"
+    }
+  },
+  "coverage": {
+    "app/src/test/java/ro/chimeraerp/assist/BrowserPolicyTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Reject altered issuer/tenant endpoints and missing, wrong or expired callback state",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Pure Android boundary tests; no physical call or browser return acceptance"
+      ]
+    },
+    "app/src/test/java/ro/chimeraerp/assist/EndpointTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Reject unsafe ERP origins and partner document paths",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Pure Android boundary tests; no physical call or browser return acceptance"
+      ]
+    },
+    "tool/release.test.mjs": {
+      "runner": "node:test",
+      "level": "contract",
+      "behavior": "Stable unambiguous Android versions, exact release package/certificate, hash/source-bound public download metadata",
+      "command": "npm test",
+      "limitations": [
+        "Synthetic badging/signature fixtures; actual APK independently checked before publication"
+      ]
+    }
+  },
+  "releaseChecks": [
+    [
+      "npm",
+      "test"
+    ],
+    [
+      "./gradlew",
+      ":app:testDebugUnitTest",
+      ":app:lintDebug"
+    ]
+  ]
+}
