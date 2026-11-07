@@ -17,6 +17,9 @@ class SessionTokens(private val context: Context) {
     internal var renew: (Session) -> Session = ::refresh
     fun valid(expected: Session): Session = synchronized(lock) {
         val current = read()?.takeIf { expected.sameLogin(it) } ?: throw ApiFailure(401,"session_expired")
+        HelperState(context).seedLogin(current)
+        // 0.2.x stored no expiry/refresh metadata. Do not treat that old grant as infinite.
+        if (current.expiresAt == Long.MAX_VALUE && current.refreshToken == null) throw ApiFailure(401,"session_upgrade_required")
         if (current.expiresAt > System.currentTimeMillis() + 60_000) return@synchronized current
         val next = renew(current)
         require(current.sameLogin(next))
@@ -58,5 +61,8 @@ class SessionTokens(private val context: Context) {
                 expiresAt=token.accessTokenExpirationTime ?: System.currentTimeMillis())
         } finally { service.dispose() }
     }
-    companion object { private val lock = Any() }
+    companion object {
+        private val lock = Any()
+        fun expiryCode(error: ApiFailure) = if (error.code == "session_upgrade_required") error.code else "session_expired"
+    }
 }

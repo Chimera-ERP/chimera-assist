@@ -145,4 +145,64 @@ class AssistServiceTest {
         assertFalse(AssistService.overlayAttached())
         assertNull(AssistService.calls.current(session))
     }
+    @Test fun matchedNotificationReopensOverlayWithoutLaunchingFullScreenActivity() {
+        val content = FrameLayout(service)
+        service.panelFactory = { object: PanelSurface {
+            override val view: View = content
+            override fun visible(value: Boolean) {}
+            override fun destroy() {}
+        } }
+        service.lookupRequest = { _, _ -> match }
+        service.onStartCommand(Intent().setAction("lookup").putExtra("phone","+442079460123"),0,1)
+        await { AssistService.calls.result(session) != null }
+        val cursor = CallContext.Cursor("supplier","synthetic","invoices",25,"invoice_1")
+        AssistService.calls.navigate(session,AssistService.calls.id(session)!!,cursor)
+        val notification = shadowOf(service.getSystemService(NotificationManager::class.java)).getNotification(1)
+        val intent = shadowOf(notification.contentIntent).savedIntent
+        assertEquals(AssistService::class.java.name,intent.component!!.className)
+        assertEquals("open-workspace",intent.action)
+        service.onStartCommand(intent,0,2)
+        assertNotNull(content.parent)
+        assertTrue(AssistService.calls.expanded(session))
+        assertEquals(cursor,AssistService.calls.cursor(session))
+        assertNull(shadowOf(service).nextStartedActivity)
+    }
+
+    @Test @Config(qualifiers = "w393dp-h851dp")
+    fun detailsKeepBackgroundVisibleAndGrowDownFromTheSameAnchor() {
+        val content = FrameLayout(service)
+        service.panelFactory = { object: PanelSurface {
+            override val view: View = content
+            override fun visible(value: Boolean) {}
+            override fun destroy() {}
+        } }
+        service.onStartCommand(Intent().setAction("test-overlay"),0,1)
+        service.expand()
+        val container = content.parent as View
+        val before = (container.layoutParams as WindowManager.LayoutParams).y
+        service.resizePanel(10000)
+        val params = container.layoutParams as WindowManager.LayoutParams
+        val metrics = service.resources.displayMetrics
+        assertEquals(before,params.y)
+        assertTrue(params.height <= metrics.heightPixels * .62)
+        assertTrue(params.width <= metrics.widthPixels - 48 * metrics.density)
+        assertTrue(params.y + params.height < metrics.heightPixels)
+        assertEquals(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,params.type)
+        assertNull(shadowOf(service).nextStartedActivity)
+    }
+
+    @Test fun manualSelectionReopensSamePartnerCursorAndRejectsStaleLoginOrForeignPartner() {
+        AssistService.presentManual(service,session,"+442079460123",match,"supplier","synthetic")
+        val cursor=CallContext.Cursor("supplier","synthetic","invoices",25,"invoice_1")
+        AssistService.calls.navigate(session,AssistService.calls.id(session)!!,cursor)
+        AssistService.presentManual(service,session,"+442079460123",match,"supplier","synthetic")
+        assertEquals(cursor,AssistService.calls.cursor(session))
+        val context=AssistService.calls.id(session)
+        try {AssistService.presentManual(service,session.copy(loginId="foreign"),"+442079460456",match,"supplier","synthetic");fail("Must reject old login")}catch(_:IllegalArgumentException){}
+        try {AssistService.presentManual(service,session,"+442079460456",match,"supplier","unknown");fail("Must reject unknown partner")}catch(_:IllegalArgumentException){}
+        assertEquals(context,AssistService.calls.id(session))
+        assertEquals(cursor,AssistService.calls.cursor(session))
+        assertNull(shadowOf(service).nextStartedActivity)
+    }
+
 }

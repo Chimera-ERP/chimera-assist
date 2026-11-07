@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[35])
 class SessionTokensTest {
-    private val initial=Session("https://erp.example.test","expired","Synthetic","login-one",expiresAt=0)
+    private val initial=Session("https://erp.example.test","expired","Synthetic","login-one",refreshToken="synthetic-proof",expiresAt=0)
     private fun tokens(current:AtomicReference<Session?>)=SessionTokens(RuntimeEnvironment.getApplication()).apply {
         read={current.get()}
         replace={old,next -> current.get()?.takeIf {old.sameLogin(it)}?.let {current.compareAndSet(it,next)} ?: false}
@@ -49,5 +49,25 @@ class SessionTokensTest {
         val state=AtomicReference<Session?>(initial.copy(loginId="another-login",expiresAt=Long.MAX_VALUE))
         val tokens=tokens(state).apply {renew={throw AssertionError("must not refresh")}}
         try{tokens.valid(initial);fail("Must reject old login")}catch(e:ApiFailure){assertEquals(401,e.status)}
+    }
+    @Test fun legacyGrantRequiresOneLoginAndPreservesItsSelfHostedAddress() {
+        val old=Session("https://legacy.example.test","synthetic","Synthetic")
+        val state=AtomicReference<Session?>(old)
+        val context=RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("login-preferences",0).edit().clear().commit()
+        val tokens=tokens(state).apply {renew={throw AssertionError("Legacy grant has no refresh proof")}}
+        try{tokens.valid(old);fail("Must reject an unknown expiry")}catch(e:ApiFailure){
+            assertEquals(401,e.status);assertEquals("session_upgrade_required",SessionTokens.expiryCode(e))
+        }
+        assertEquals(old.origin,HelperState(context).enterpriseOrigin)
+    }
+    @Test fun temporaryNetworkFailurePreservesSessionAndCanRetryRenewal() {
+        val state=AtomicReference<Session?>(initial)
+        val tokens=tokens(state).apply {renew={throw java.io.IOException("Synthetic offline")}}
+        try{tokens.valid(initial);fail("Must report connection failure")}catch(_:java.io.IOException){}
+        assertEquals(initial,state.get())
+        tokens.renew={it.copy(token="retried",refreshToken="rotated-proof",expiresAt=System.currentTimeMillis()+900_000)}
+        assertEquals("retried",tokens.valid(initial).token)
+        assertEquals("rotated-proof",state.get()!!.refreshToken)
     }
 }

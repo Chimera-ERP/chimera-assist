@@ -23,6 +23,11 @@ export function validateApk(v,badging,certificate) {
     throw Error('APK package, version, release mode or signing identity mismatch');
   }
 }
+export function buildOrigin(env) {
+  if(env.ASSIST_BUILD_SOURCE === 'local') return 'Built locally; no GitHub build attestation.';
+  if(env.GITHUB_ACTIONS === 'true' && !env.ASSIST_BUILD_SOURCE) return 'Built by GitHub Actions.';
+  throw Error('Declare ASSIST_BUILD_SOURCE=local outside GitHub Actions');
+}
 export function releaseManifest(v,bytes,commit) {
   if(!/^[a-f0-9]{40}$/.test(commit)) throw Error('Expected exact source commit');
   return {version:1, packageName:'ro.chimeraerp.assist', versionName:v.name,versionCode:v.code,
@@ -62,6 +67,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     const publish=plan(v);
     appendFileSync(process.env.GITHUB_OUTPUT,`publish=${publish}\ntag=${v.tag}\nversion=${v.name}\n`);
   }else if(mode==='package'){
+    const origin=buildOrigin(process.env);
     const apk=process.argv[3];
     validateApk(v,run(process.env.AAPT,['dump','badging',apk]),run(process.env.APKSIGNER,['verify','--verbose','--print-certs',apk]));
     const manifest=releaseManifest(v,readFileSync(apk),process.env.GITHUB_SHA||run('git',['rev-parse','HEAD']));
@@ -69,7 +75,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     copyFileSync(apk,`release/chimera-assist-${v.name}.apk`);
     writeFileSync('release/assist-update.json',JSON.stringify(manifest,null,2)+'\n');
     writeFileSync('release/SHA256SUMS',`${manifest.sha256}  chimera-assist-${v.name}.apk\n`);
-    writeFileSync('release/notes.md',`Chimera Assist ${v.name} (Android build ${v.code}).\n\nBuilt by GitHub Actions from ${manifest.sourceCommit}.\n\nFloating caller workspace with header actions, inline invoices/payments/products and individual details, pagination and outside-tap minimization. Each caller keeps its own selected record and scroll for30 minutes after call activity ends; active calls do not expire. No Close button or full-screen handoff. Requires Chimera server0.20.0 or later. Install over the existing signed release, allow Phone state and sign in once again to enable bounded session renewal. Android10+ test release; physical Nothing Phone incoming-call and native Flutter-overlay acceptance remain pending. Business data stays in ERP.\n\nAPK SHA256: \`${manifest.sha256}\`\n`);
+    writeFileSync('release/notes.md',`Chimera Assist ${v.name} (Android build ${v.code}).\n\n${origin} Source: ${manifest.sourceCommit}.\n\nCompact anchored caller menu with circular actions, inline invoices/payments/products and individual details, pagination and outside-tap minimization. Notifications and partner selections reopen the floating surface. Self-hosted URL starts with https:// and the chosen domain survives logout/expiry. Old0.2.x grants prompt one browser login to enable renewal; transient network failure preserves the session. Each caller keeps its own selected record and scroll for30 minutes after call activity ends; active calls do not expire. No Close button or full-screen handoff. Requires Chimera server0.20.0 or later. Install over the existing signed release, allow Phone state and sign in once again to enable bounded session renewal. Android10+ test release; physical Nothing Phone incoming-call and native Flutter-overlay acceptance remain pending. Business data stays in ERP.\n\nAPK SHA256: \`${manifest.sha256}\`\n`);
     console.log(JSON.stringify(manifest));
   }else throw Error('Expected plan or package');
 }

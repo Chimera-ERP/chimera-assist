@@ -7,6 +7,19 @@ import java.util.Locale
 /** Only operational state is persisted: never caller numbers, names, tokens or API responses. */
 class HelperState(private val context: Context) {
     private val prefs = context.getSharedPreferences("helper", Context.MODE_PRIVATE)
+    private val loginPrefs = context.getSharedPreferences("login-preferences", Context.MODE_PRIVATE)
+    val enterpriseOrigin: String? get() = loginPrefs.getString("enterprise-origin",null)
+    val enterpriseLogin: Boolean get() = loginPrefs.getBoolean("enterprise-login",false)
+    fun rememberLogin(origin: String?) {
+        val canonical = origin?.let(Endpoint::origin)
+        loginPrefs.edit().apply {
+            putBoolean("enterprise-login",canonical != null)
+            if (canonical != null) putString("enterprise-origin",canonical)
+        }.apply()
+    }
+    fun seedLogin(session: Session?) {
+        if (!loginPrefs.contains("enterprise-login") && session != null && session.origin != "https://app.chimeraerp.ro") rememberLogin(session.origin)
+    }
     var enabled: Boolean
         get() = prefs.getBoolean("enabled", false)
         set(value) { prefs.edit().putBoolean("enabled", value).apply() }

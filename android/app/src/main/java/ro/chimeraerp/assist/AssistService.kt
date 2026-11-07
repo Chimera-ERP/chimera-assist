@@ -28,7 +28,7 @@ class AssistService : Service() {
     private var overlay: View? = null
     private var panelSurface: PanelSurface? = null
     private var panelContainer: View? = null
-    private var panelHeight = 310
+    private var panelHeight = 260
     private var panelContextId: Long? = null
     private var expanded = false
     private var demo = false
@@ -83,6 +83,12 @@ class AssistService : Service() {
             state.enabled = false; calls.clear(); state.report("stopped"); stopSelf(); return START_NOT_STICKY
         }
         when (intent?.action) {
+            "open-workspace" -> {
+                if (demo || calls.result(readSession())?.partners?.isNotEmpty() == true) {
+                    if (panelContextId != calls.id(readSession())) releasePanel()
+                    expand()
+                }
+            }
             "test-overlay" -> { releasePanel(); demo = true; report("testing", R.string.test_success); bubble(null) }
             "lookup" -> intent.getStringExtra("phone")?.let { phone -> readSession()?.let { lookup(calls.begin(phone, state.region(), it)) } }
             else -> {
@@ -131,7 +137,7 @@ class AssistService : Service() {
                     when {
                         error is ApiFailure && error.status == 401 -> {
                             SessionStore(this).clear(); calls.clear(); state.enabled = false
-                            report("session_expired", R.string.session_expired)
+                            report(SessionTokens.expiryCode(error), if (error.code == "session_upgrade_required") R.string.session_upgrade_required else R.string.session_expired)
                             stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
                         }
                         error is ApiFailure && error.status == 403 -> report("forbidden", R.string.forbidden)
@@ -206,8 +212,7 @@ class AssistService : Service() {
             }.apply { addView(panelSurface!!.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)) }
         }
         if (overlay !== panelContainer) {
-            val metrics = resources.displayMetrics
-            attach(panelContainer!!, minOf(dp(392), metrics.widthPixels - dp(24)), minOf(dp(panelHeight), metrics.heightPixels - dp(96)))
+            attach(panelContainer!!, panelWidth(), minOf(dp(panelHeight), panelLimit()))
             resizePanel(panelHeight)
         }
         if (overlay === panelContainer) panelSurface?.visible(true)
@@ -217,17 +222,29 @@ class AssistService : Service() {
         if (!demo) calls.expanded(readSession(),false)
         if (demo) bubble(null) else calls.result(readSession())?.let { bubble(it) } ?: dismiss()
     }
-    private fun resizePanel(height: Int) {
-        panelHeight = height
+    private fun panelWidth() = minOf(dp(336), resources.displayMetrics.widthPixels - dp(48)).coerceAtLeast(dp(160))
+    private fun panelLimit(): Int {
+        val metrics = resources.displayMetrics
+        val available = metrics.heightPixels - dp(72)
+        return minOf(dp(480), if (metrics.heightPixels > metrics.widthPixels) (metrics.heightPixels * .62).toInt() else available).coerceAtMost(available)
+    }
+    internal fun resizePanel(height: Int) {
+        panelHeight = height.coerceIn(160,480)
         val view = overlay?.takeIf { it === panelContainer } ?: return
         val params = view.layoutParams as WindowManager.LayoutParams
-        params.height = minOf(dp(height), resources.displayMetrics.heightPixels - dp(96))
-        params.gravity = Gravity.END or Gravity.TOP
         val metrics = resources.displayMetrics
-        val maxHeight = minOf(dp(680),metrics.heightPixels-dp(96))
-        params.y = (metrics.heightPixels/2+bubbleY-dp(32)).coerceIn(dp(24),maxOf(dp(24),metrics.heightPixels-maxHeight-dp(48)))
-        params.x = dp(12)
+        params.width = panelWidth()
+        params.height = minOf(dp(panelHeight), panelLimit())
+        params.gravity = Gravity.END or Gravity.TOP
+        // Reserve room for details, so expansion grows down from a stable anchor.
+        params.y = (metrics.heightPixels/2+bubbleY-dp(32)).coerceIn(dp(12),maxOf(dp(12),metrics.heightPixels-panelLimit()-dp(48)))
+        params.x = dp(bubbleX).coerceIn(dp(12),maxOf(dp(12),metrics.widthPixels-params.width-dp(12)))
         windows.updateViewLayout(view,params)
+    }
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (overlay === panelContainer) resizePanel(panelHeight)
+        else if (overlay != null) bubble(calls.result(readSession()))
     }
     private fun updateCallState() { calls.callState(try { isCallActive() } catch (_: SecurityException) { false }) }
     private fun readBackground(reply: MethodChannel.Result, session: Session, read: () -> Any?) {
@@ -243,9 +260,9 @@ class AssistService : Service() {
                 handler.post {
                     if (session.sameLogin(readSession()) && error is ApiFailure && error.status == 401) {
                         SessionStore(this).clear(); calls.clear(); state.enabled = false; dismiss()
-                        report("session_expired",R.string.session_expired); stopSelf()
+                        report(SessionTokens.expiryCode(error),if (error.code == "session_upgrade_required") R.string.session_upgrade_required else R.string.session_expired); stopSelf()
                     }
-                    reply.error(if (error is ApiFailure) when(error.status) {401 -> "session_expired";403 -> "forbidden";404 -> "not_found";else -> "network_error"} else "network_error",null,null)
+                    reply.error(if (error is ApiFailure) when(error.status) {401 -> SessionTokens.expiryCode(error);403 -> "forbidden";404 -> "not_found";else -> "network_error"} else "network_error",null,null)
                 }
             }
         }
@@ -274,14 +291,39 @@ class AssistService : Service() {
         fun clear() { calls.clear(); active?.get()?.dismiss() }
         fun running() = active?.get() != null
         fun overlayAttached() = active?.get()?.overlay != null
-        fun openWorkspace() { active?.get()?.expand() }
+        private fun currentSession(context: Context) = active?.get()?.readSession() ?: SessionStore(context).read()
+        fun openWorkspace(context: Context, kind: String? = null, id: String? = null) {
+            val session = requireNotNull(currentSession(context))
+            require(Settings.canDrawOverlays(context))
+            require(calls.result(session)?.partners?.isNotEmpty() == true)
+            if (kind != null || id != null) {
+                val selected = calls.result(session)!!.partners.first { it.kind == kind && it.id == id }
+                val cursor = calls.cursor(session)
+                if (cursor.kind != kind || cursor.partner != id) {
+                    check(calls.navigate(session,calls.id(session)!!,CallContext.Cursor(selected.kind,selected.id)))
+                }
+            }
+            context.startForegroundService(Intent(context,AssistService::class.java).setAction("open-workspace"))
+        }
+        fun presentManual(context: Context, session: Session, phone: String, result: Lookup, kind: String, id: String) {
+            require(session.sameLogin(currentSession(context)))
+            require(Settings.canDrawOverlays(context))
+            require(result.partners.any { it.kind == kind && it.id == id })
+            val event = calls.begin(phone,null,session)
+            check(calls.complete(event,session,result))
+            openWorkspace(context,kind,id)
+        }
         private fun notifications(context: Context) {
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel("assist-status", context.getString(R.string.app_name), NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(null, null) })
         }
         private fun notification(context: Context, message: Int): Notification {
             val stop = PendingIntent.getService(context, 2, Intent(context, AssistService::class.java).setAction("stop"), PendingIntent.FLAG_IMMUTABLE)
-            val open = PendingIntent.getActivity(context, 1, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+            val service = active?.get()
+            val hasWorkspace = service != null && (service.demo || calls.result(service.readSession())?.partners?.isNotEmpty() == true)
+            val open = if (hasWorkspace && Settings.canDrawOverlays(context))
+                PendingIntent.getService(context, 3, Intent(context, AssistService::class.java).setAction("open-workspace"), PendingIntent.FLAG_IMMUTABLE)
+            else PendingIntent.getActivity(context, 1, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
             return Notification.Builder(context, "assist-status").setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(context.getString(R.string.app_name)).setContentText(context.getString(message))
                 .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(Notification.VISIBILITY_SECRET)

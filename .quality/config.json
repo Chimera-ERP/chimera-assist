@@ -114,7 +114,7 @@
       "standalone": true,
       "runner": "gradle",
       "level": "unit",
-      "behavior": "Concurrent renewal runs once; logout and changed login cannot be overwritten or borrowed by stale requests",
+      "behavior": "Serialized renewal, logout and login boundaries, explicit legacy upgrade and retryable offline renewal preserving credentials",
       "command": "./gradlew :app:testDebugUnitTest",
       "limitations": [
         "Injected renewal boundary; real provider rotation covered in Auth integration, physical device acceptance separate"
@@ -127,6 +127,16 @@
       "command": "flutter test",
       "limitations": [
         "Synthetic native bridge; actual Android WindowManager and physical Telecom acceptance separate"
+      ]
+    },
+    "android/app/src/test/java/ro/chimeraerp/assist/HelperStateTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Persist self-hosted origin and explicit Cloud choice across logout/recreation; seed old sessions and reject unsafe origins",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Synthetic preferences; physical browser login acceptance separate"
       ]
     }
   },

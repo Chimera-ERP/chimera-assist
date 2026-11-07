@@ -242,13 +242,7 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
   void resize() {
     if (!widget.floating) return;
     widget.bridge
-        .call('resize', {
-          'height': action == null
-              ? (widget.partners.length > 1 ? 410 : 310)
-              : item != null && detail != null && action != 'invoices'
-              ? (290 + objects(detail?['fields']).length * 34).clamp(390, 600)
-              : 600,
-        })
+        .call('resize', {'height': requestedHeight})
         .catchError((_) => null);
   }
 
@@ -374,208 +368,316 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
     super.dispose();
   }
 
+  final surfaceKey = GlobalKey(), anchorKey = GlobalKey();
+  void outside(PointerDownEvent event) {
+    if (!widget.floating) return;
+    bool contains(GlobalKey key) {
+      final box = key.currentContext?.findRenderObject();
+      return box is RenderBox &&
+          box.hasSize &&
+          (box.localToGlobal(Offset.zero) & box.size).contains(event.position);
+    }
+
+    if (!contains(surfaceKey) && !contains(anchorKey)) {
+      widget.bridge.call('minimize');
+    }
+  }
+
+  double textScale = 1;
+  int get requestedHeight => action != null
+      ? 460
+      : partner == null || widget.demo || widget.partners.isEmpty
+      ? 300
+      : (260 + (textScale - 1).clamp(0, 1.5) * 140).round();
+
+  IconData actionIcon(String value) => switch (value) {
+    'invoices' => Icons.receipt_long_outlined,
+    'payments' => Icons.account_balance_wallet_outlined,
+    _ => Icons.inventory_2_outlined,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    if (scale != textScale) {
+      textScale = scale;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) resize();
+      });
+    }
     final actions = (partner?['actions'] as List? ?? []).cast<String>();
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxHeight < 420;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: Material(
-              color: const Color(0xfffafbff),
-              child: Column(
-                children: [
-                  Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xff202642), Color(0xff11172c)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    padding: EdgeInsets.fromLTRB(
-                      18,
-                      compact ? 6 : 16,
-                      10,
-                      compact ? 8 : 14,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Image.asset('assets/chimera_logo.png'),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'CHIMERA ASSIST',
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: const Color(0xffbac2e7),
-                                      letterSpacing: 1.6,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    partner == null
-                                        ? t('La îndemână', 'At your fingertips')
-                                        : (partner!['kind'] == 'supplier'
-                                              ? t('Furnizor', 'Supplier')
-                                              : t('Client', 'Client')),
-                                    style: const TextStyle(
-                                      color: Color(0xffcbd2ef),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (widget.partners.length > 1 && partner != null)
-                              IconButton(
-                                tooltip: t(
-                                  'Schimbă partenerul',
-                                  'Change partner',
-                                ),
-                                onPressed: () {
-                                  generation++;
-                                  setState(() {
-                                    partner = null;
-                                    action = item = null;
-                                    rows = detail = null;
-                                    loading = false;
-                                    error = null;
-                                    offset = detailOffset = 0;
-                                    listScroll = detailScroll = 0;
-                                  });
-                                  resize();
-                                },
-                                icon: const Icon(
-                                  Icons.people_outline,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            if (widget.floating)
-                              IconButton(
-                                tooltip: t('Minimizează', 'Minimize'),
-                                onPressed: () => widget.bridge.call('minimize'),
-                                icon: const Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  color: Colors.white,
-                                ),
-                              ),
-                          ],
-                        ),
-                        SizedBox(height: compact ? 4 : 14),
-                        Text(
-                          partner?['name'] as String? ??
-                              (widget.demo
-                                  ? t(
-                                      'Panoul tău pentru apeluri',
-                                      'Your call workspace',
-                                    )
-                                  : t(
-                                      'Alege partenerul',
-                                      'Choose the partner',
-                                    )),
-                          maxLines: compact ? 1 : 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: compact ? 16 : 20,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
+    final showBody =
+        action != null || partner == null || widget.demo || actions.isEmpty;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    return Listener(
+      onPointerDown: outside,
+      behavior: HitTestBehavior.translucent,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxHeight < 320 && action != null;
+          final showAnchor =
+              widget.floating &&
+              !compact &&
+              constraints.maxHeight >= requestedHeight;
+          final limit = requestedHeight
+              .toDouble()
+              .clamp(0.0, constraints.maxHeight)
+              .toDouble();
+          return Align(
+            alignment: Alignment.topRight,
+            child: SizedBox(
+              height: limit,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  children: [
+                    if (showAnchor) ...[
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton.filledTonal(
+                          key: anchorKey,
+                          tooltip: t('Minimizează', 'Minimize'),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            fixedSize: const Size(48, 48),
+                            shape: const CircleBorder(),
+                          ),
+                          onPressed: () => widget.bridge.call('minimize'),
+                          icon: Image.asset(
+                            'assets/chimera_logo.png',
+                            width: 30,
+                            height: 30,
                           ),
                         ),
-                        if (actions.isNotEmpty) ...[
-                          SizedBox(height: compact ? 6 : 16),
-                          Row(
-                            children: actions
-                                .map(
-                                  (a) => Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(right: 6),
-                                      child: Semantics(
-                                        selected: a == action,
-                                        child: TextButton(
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: a == action
-                                                ? const Color(0xff262151)
-                                                : const Color(0xffd6dcf5),
-                                            backgroundColor: a == action
-                                                ? const Color(0xffdcd6ff)
-                                                : const Color(0xff2c3350),
-                                            padding: EdgeInsets.symmetric(
-                                              vertical: compact ? 6 : 11,
-                                              horizontal: 4,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(13),
-                                            ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Flexible(
+                      fit: showBody ? FlexFit.tight : FlexFit.loose,
+                      child: Material(
+                        key: surfaceKey,
+                        color: const Color(0xfffcfcff),
+                        elevation: 5,
+                        shadowColor: const Color(0x33202642),
+                        borderRadius: BorderRadius.circular(26),
+                        clipBehavior: Clip.antiAlias,
+                        child: panelContents(showBody, [
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              16,
+                              compact ? 4 : 12,
+                              8,
+                              compact ? 2 : 8,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (!compact)
+                                        Text(
+                                          partner == null
+                                              ? 'Chimera Assist'
+                                              : partner!['kind'] == 'supplier'
+                                              ? t('Furnizor', 'Supplier')
+                                              : t('Client', 'Client'),
+                                          style: const TextStyle(
+                                            color: Color(0xff66637f),
+                                            fontSize: 12,
                                           ),
-                                          onPressed: () => choose(a),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              if (!compact)
-                                                Icon(switch (a) {
-                                                  'invoices' =>
-                                                    Icons.receipt_long_outlined,
-                                                  'payments' =>
-                                                    Icons
-                                                        .account_balance_wallet_outlined,
-                                                  _ =>
-                                                    Icons.inventory_2_outlined,
-                                                }, size: 19),
-                                              if (!compact)
-                                                const SizedBox(height: 5),
-                                              Text(
-                                                label(a),
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
+                                        ),
+                                      Text(
+                                        partner?['name'] as String? ??
+                                            (widget.demo
+                                                ? t(
+                                                    'Testează cercul',
+                                                    'Test the circle',
+                                                  )
+                                                : t(
+                                                    'Alege partenerul',
+                                                    'Choose the partner',
+                                                  )),
+                                        maxLines: compact ? 1 : 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Color(0xff202642),
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (widget.partners.length > 1 &&
+                                    partner != null)
+                                  IconButton(
+                                    tooltip: t(
+                                      'Schimbă partenerul',
+                                      'Change partner',
+                                    ),
+                                    onPressed: () {
+                                      generation++;
+                                      setState(() {
+                                        partner = null;
+                                        action = item = null;
+                                        rows = detail = null;
+                                        loading = false;
+                                        error = null;
+                                        offset = detailOffset = 0;
+                                        listScroll = detailScroll = 0;
+                                      });
+                                      resize();
+                                    },
+                                    icon: const Icon(
+                                      Icons.people_outline,
+                                      size: 20,
+                                    ),
+                                  ),
+                                if (widget.floating && !showAnchor)
+                                  IconButton(
+                                    tooltip: t('Minimizează', 'Minimize'),
+                                    onPressed: () =>
+                                        widget.bridge.call('minimize'),
+                                    icon: const Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (actions.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  for (final a in actions)
+                                    Expanded(
+                                      child: TweenAnimationBuilder<double>(
+                                        tween: Tween(
+                                          begin: reducedMotion ? 1 : 0,
+                                          end: 1,
+                                        ),
+                                        duration: reducedMotion
+                                            ? Duration.zero
+                                            : const Duration(milliseconds: 220),
+                                        curve: Curves.easeOutCubic,
+                                        builder: (context, value, child) =>
+                                            Transform.translate(
+                                              offset: Offset(
+                                                (1 - value) *
+                                                    (actions.length -
+                                                        actions.indexOf(a)) *
+                                                    18,
+                                                (1 - value) * -20,
                                               ),
-                                            ],
+                                              child: Opacity(
+                                                opacity: value,
+                                                child: child,
+                                              ),
+                                            ),
+                                        child: Semantics(
+                                          selected: action == a,
+                                          child: TextButton(
+                                            onPressed: () => choose(a),
+                                            style: TextButton.styleFrom(
+                                              minimumSize: const Size(48, 48),
+                                              foregroundColor: action == a
+                                                  ? const Color(0xff4434b5)
+                                                  : const Color(0xff343b53),
+                                              backgroundColor: action == a
+                                                  ? const Color(0xffeeebff)
+                                                  : Colors.transparent,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: 8,
+                                                  ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(18),
+                                              ),
+                                            ),
+                                            child: action == null
+                                                ? Column(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Container(
+                                                        width: 44,
+                                                        height: 44,
+                                                        decoration:
+                                                            const BoxDecoration(
+                                                              color: Color(
+                                                                0xffeeebff,
+                                                              ),
+                                                              shape: BoxShape
+                                                                  .circle,
+                                                            ),
+                                                        child: Icon(
+                                                          actionIcon(a),
+                                                          size: 22,
+                                                          color: const Color(
+                                                            0xff5144d3,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Text(
+                                                        label(a),
+                                                        style: const TextStyle(
+                                                          fontSize: 13,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  )
+                                                : Text(
+                                                    label(a),
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ],
-                      ],
+                                ],
+                              ),
+                            ),
+                          if (!showBody) const SizedBox(height: 8),
+                          if (showBody) ...[
+                            const SizedBox(height: 4),
+                            if (loading)
+                              const LinearProgressIndicator(minHeight: 2),
+                            Expanded(child: body()),
+                            if (action != null && error == null) pager(),
+                          ],
+                        ]),
+                      ),
                     ),
-                  ),
-                  if (loading) const LinearProgressIndicator(minHeight: 2),
-                  Expanded(child: body()),
-                  if (action != null && error == null) pager(),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
+
+  Widget panelContents(bool hasBody, List<Widget> children) => hasBody
+      ? Column(children: children)
+      : SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: children),
+        );
 
   Widget notice(IconData icon, String text, {bool retry = false}) => Center(
     child: SingleChildScrollView(
@@ -644,10 +746,10 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
     }
     if (action == null) {
       return notice(
-        Icons.north_rounded,
+        Icons.lock_outline,
         t(
-          'Alege o acțiune din antet. Totul rămâne aici, lângă apel.',
-          'Choose an action above. Everything stays here, beside your call.',
+          'Nu ai acces la documentele acestui partener.',
+          'No document actions available for this partner.',
         ),
       );
     }
@@ -660,6 +762,10 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
         'not_found' => t(
           'Înregistrarea nu mai este disponibilă.',
           'This record is no longer available.',
+        ),
+        'session_upgrade_required' => t(
+          'Conectează-te din nou în Assist pentru a activa reînnoirea sesiunii.',
+          'Sign in again in Assist to enable session renewal.',
         ),
         'session_expired' => t(
           'Autentifică-te din nou în Assist.',
@@ -717,7 +823,7 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
                         row['detail'] as String? ?? '',
                         style: const TextStyle(
                           fontSize: 11,
-                          color: Color(0xff797d93),
+                          color: Color(0xff626980),
                         ),
                       ),
                       if (row['outstanding'] != null)
@@ -751,7 +857,7 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
                           row['currency'] as String? ?? '',
                           style: const TextStyle(
                             fontSize: 10,
-                            color: Color(0xff797d93),
+                            color: Color(0xff626980),
                           ),
                         ),
                       ],
@@ -761,7 +867,7 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
                 const Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: Color(0xff9698ac),
+                  color: Color(0xff727891),
                 ),
               ],
             ),
@@ -784,7 +890,7 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
                   child: Text(
                     label(field['key'] as String),
                     style: const TextStyle(
-                      color: Color(0xff74788e),
+                      color: Color(0xff626980),
                       fontSize: 12,
                     ),
                   ),
@@ -907,7 +1013,7 @@ class _RecordWorkspaceState extends State<RecordWorkspace> {
             child: Text(
               '${t('Pagina', 'Page')} ${start ~/ 25 + 1}',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Color(0xff74788e)),
+              style: const TextStyle(fontSize: 12, color: Color(0xff626980)),
             ),
           ),
           IconButton(
@@ -951,7 +1057,7 @@ class WorkspacePreview extends StatefulWidget {
 }
 
 class _WorkspacePreviewState extends State<WorkspacePreview> {
-  double height = 310;
+  double height = 260;
   bool minimized = false;
   late final AssistBridge bridge = _PreviewPanelBridge(widget.bridge, (
     method,
@@ -994,16 +1100,14 @@ class _WorkspacePreviewState extends State<WorkspacePreview> {
         ),
         Positioned(
           top: 140,
-          right: 8,
-          left: 8,
+          right: 20,
+          width: (MediaQuery.sizeOf(context).width - 48).clamp(160, 336),
           child: Offstage(
             offstage: minimized,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
+            child: SizedBox(
               height: height.clamp(
                 160,
-                MediaQuery.sizeOf(context).height - 164,
+                (MediaQuery.sizeOf(context).height * .62).clamp(160, 480),
               ),
               child: CallerWorkspace(bridge: bridge, romanian: widget.romanian),
             ),

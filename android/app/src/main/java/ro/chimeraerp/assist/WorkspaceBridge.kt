@@ -27,7 +27,7 @@ internal class WorkspaceBridge(
                             "scroll" to cursor.scroll,"detailScroll" to cursor.detailScroll)))
                 }
                 "minimize" -> { minimize(); reply.success(null) }
-                "resize" -> { resize((call.argument<Number>("height")?.toInt() ?: 240).coerceIn(160, 680)); reply.success(null) }
+                "resize" -> { resize((call.argument<Number>("height")?.toInt() ?: 240).coerceIn(160, 480)); reply.success(null) }
                 "navigate" -> {
                     val cursor = CallContext.Cursor(call.argument("kind"),call.argument("partner"),call.argument("action"),
                         call.argument<Int>("offset") ?: 0,call.argument("item"),call.argument<Int>("detailOffset") ?: 0,

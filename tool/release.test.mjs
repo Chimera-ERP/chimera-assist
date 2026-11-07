@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {version,validateFlutterVersion,validateApk,releaseManifest,signingCertificate} from './release.mjs';
+import {version,validateFlutterVersion,validateApk,releaseManifest,signingCertificate,buildOrigin} from './release.mjs';
 const v={name:'0.1.1',code:2,tag:'v0.1.1'};
 const badge="package: name='ro.chimeraerp.assist' versionCode='2' versionName='0.1.1'";
 const cert=`Signer #1 certificate SHA-256 digest: ${signingCertificate}`;
@@ -25,4 +25,11 @@ test('public download metadata binds exact APK bytes, signer, source and version
  assert.equal(manifest.url,'https://github.com/Chimera-ERP/chimera-assist/releases/download/v0.1.1/chimera-assist-0.1.1.apk');
  assert.equal(manifest.sha256.length,64);assert.notEqual(manifest.sha256,releaseManifest(v,Buffer.from('changed'),'a'.repeat(40)).sha256);
  assert.throws(()=>releaseManifest(v,Buffer.from('x'),'main'));
+});
+
+test('local packaging declares its provenance and cannot claim GitHub attestation',()=>{
+ assert.match(buildOrigin({ASSIST_BUILD_SOURCE:'local'}),/no GitHub build attestation/);
+ assert.equal(buildOrigin({GITHUB_ACTIONS:'true'}),'Built by GitHub Actions.');
+ assert.throws(()=>buildOrigin({}));
+ assert.throws(()=>buildOrigin({ASSIST_BUILD_SOURCE:'unknown',GITHUB_ACTIONS:'true'}));
 });

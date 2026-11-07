@@ -3,7 +3,7 @@
 Status: Flutter Android test releases; physical-device acceptance remains pending. iOS host is preparation only.
 Owner: Chimera mobile and ERP maintainers. Android ID: `ro.chimeraerp.assist`.
 Business contract: [MDM-AST-001](https://github.com/Chimera-ERP/chimera/blob/main/docs/business-rules/master-data.md#assist-phone-discovery).
-Current work and evidence remain in the ERP [handoff](https://github.com/Chimera-ERP/chimera/blob/main/docs/development/verification-checklist.md#assist-floating-workspace-and-per-caller-return--2026-11-07).
+Current work and evidence remain in the ERP [handoff](https://github.com/Chimera-ERP/chimera/blob/main/docs/development/verification-checklist.md#assist-compact-overlay-follow-up--2026-11-07).
 
 
 ## Download and repository
@@ -30,7 +30,10 @@ No ERP address is required. Auth opens in the system browser at
 are never listed in public Cloud login. Auth returns the
 one-use authorization code directly to Assist.
 
-**Enterprise / Self-hosted** reveals a server-address field. That explicitly
+**Enterprise / Self-hosted** reveals a server-address field starting with `https://`.
+The selected mode and last valid enterprise domain remain on this device after
+logout or session expiry; Cloud can be selected again without erasing that domain.
+Existing signed-in enterprise sessions seed this preference on upgrade. That explicitly
 chosen ERP's browser configuration supplies its HTTPS Auth authority, which
 Assist pins for discovery and token exchange. Users can switch back to Cloud.
 Local credentials and configured enterprise SSO stay in the existing browser
@@ -67,7 +70,9 @@ tokens bounded by the original eight-hour grant, without offline access or slidi
 extension. Renewal is serialized and atomically saved in Keystore-encrypted storage;
 logout or a changed login cannot be overwritten by an outstanding renewal. Replay
 and current account/tenant/federation revocation are checked by Auth. Users upgrading
-an old session must log in once to obtain renewal.
+an old 0.2.x session must log in once to obtain renewal. An explicit upgrade message
+explains this instead of treating an access token without expiry metadata as infinite.
+Temporary network failures retain the session and permit retry.
 A rejected session stops the helper and requires browser login again; an existing
 central browser session can satisfy that login. Permissions remain server checked.
 
@@ -137,7 +142,12 @@ can hold the caller-ID role at a time. The bubble is not shown over the lock scr
 and is hidden on screen-off. Logout, service stop, process death or30 minutes of
 call inactivity remove its context. Another caller switches the displayed workspace;
 it does not erase previous callers. Telecom aggregate state supplies the lifetime
-boundary because CallScreeningService itself has no call-ended callback. Expanded panels have a bounded scroll area.
+boundary because CallScreeningService itself has no call-ended callback. Matched notifications and home/manual partner selections reopen the same overlay.
+The compact light menu groups three permitted circular actions below the Chimera
+anchor; lists and individual details expand downward in that surface. Portrait
+width is at most 336dp with at least 48dp total screen margin; height is capped
+at 480dp and 62% of the screen. Landscape adapts to available height. Transparent
+space around the visible menu also minimizes it. Expanded panels have a bounded scroll area.
 No identity or financial content appears in the notification or recent-app capture.
 
 Google libphonenumber9.0.43 normalizes complete numbers to E.164 before lookup.
@@ -275,8 +285,19 @@ npm run quality:check
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 # With the four ASSIST signing environment values supplied securely:
 flutter build apk --release
+# For an Actions-produced release only (local builds have no such attestation):
 gh attestation verify chimera-assist-0.3.0.apk --repo Chimera-ERP/chimera-assist
 ```
 
 An interrupted release remains a draft and must be reconciled before retrying.
 Backend readiness and the physical-phone acceptance checklist above still apply.
+
+When hosted Actions minutes are unavailable, an authorized local release uses the
+same pinned toolchain, checks, persistent signer and `tool/release.mjs plan` /
+`package` validation. Set `ASSIST_BUILD_SOURCE=local` while packaging; notes must
+identify the local build and its lack of GitHub build attestation. Attach a
+`local-verification.json` receipt binding exact source commit, APK hash, toolchain,
+commands/results and acceptance limits. Build only a clean committed source;
+verify the downloaded assets and signing certificate again before announcing the
+release. Do not substitute a debug key, label a local build as Actions-produced,
+or change automatic workflow gates/triggers to bypass exhausted billing.

@@ -66,13 +66,15 @@ class AssistHome extends StatefulWidget {
 
 class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
   Json? state;
-  final phone = TextEditingController(), server = TextEditingController();
+  final phone = TextEditingController(),
+      server = TextEditingController(text: 'https://');
+  bool loginPreferencesLoaded = false;
   Timer? poll;
   bool busy = false, reading = false, enterprise = false;
   String? error;
   int request = 0;
   String page = 'home';
-  Json? lookup, partner;
+  Json? lookup;
   bool get ro =>
       widget.romanian ??
       WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'ro';
@@ -121,12 +123,17 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
       final changedSession =
           state?['session'] != null && next['session'] == null;
       setState(() {
+        if (!loginPreferencesLoaded) {
+          server.text = next['enterpriseOrigin'] as String? ?? 'https://';
+          enterprise = next['enterpriseLogin'] == true;
+          loginPreferencesLoaded = true;
+        }
         state = next;
         if (changedSession) {
           request++;
           busy = false;
           page = 'home';
-          lookup = partner = null;
+          lookup = null;
         }
       });
     } on PlatformException catch (e) {
@@ -206,6 +213,10 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
     'invalid_phone' => t(
       'Verifică numărul complet și țara selectată. Poți folosi orice prefix internațional.',
       'Check the complete number and selected country. Any international calling code is supported.',
+    ),
+    'session_upgrade_required' => t(
+      'Conectează-te o dată după actualizare pentru a activa reînnoirea automată a sesiunii.',
+      'Sign in once after updating to enable automatic session renewal.',
     ),
     'session_expired' => t(
       'Sesiunea a expirat. Autentifică-te din nou în browser.',
@@ -373,15 +384,15 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
       });
     }
   });
-  List<Widget> partners(Json? value) => [
+  List<Widget> partners(Json? value, {bool manual = false}) => [
     if (objects(value?['partners']).isEmpty) Text(message('no_match')),
     for (final item in objects(value?['partners']))
       button(
         '${item['name']} · ${item['kind'] == 'supplier' ? t('Furnizor', 'Supplier') : t('Client', 'Client')}',
-        () => setState(() {
-          partner = item;
-          page = 'partner';
-          error = null;
+        () => command('openWorkspace', {
+          'kind': item['kind'],
+          'id': item['id'],
+          'manual': manual,
         }),
       ),
     if (value?['has_more'] == true)
@@ -457,6 +468,7 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
       ),
     if ([
       'session_expired',
+      'session_upgrade_required',
       'login_failed',
       'login_cancelled',
     ].contains(state?['status']))
@@ -515,8 +527,8 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
       if (state?['current'] != null)
         Text(
           t(
-            'Dacă aplicația Telefon ascunde cercul, poți deschide detaliile aici sau din notificarea Assist.',
-            'If the Phone app hides the circle, open details here or from the Assist notification.',
+            'Atinge partenerul sau notificarea Assist pentru a redeschide panoul plutitor.',
+            'Tap the partner or the Assist notification to reopen the floating panel.',
           ),
         ),
       button(
@@ -704,19 +716,7 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
                     ...home()
                   else if (page == 'lookup') ...[
                     heading(t('Parteneri', 'Partners')),
-                    ...partners(lookup),
-                  ] else if (page == 'partner' && partner != null) ...[
-                    SizedBox(
-                      height: (MediaQuery.sizeOf(context).height - 160).clamp(
-                        420,
-                        650,
-                      ),
-                      child: RecordWorkspace(
-                        bridge: widget.bridge,
-                        partners: [partner!],
-                        romanian: ro,
-                      ),
-                    ),
+                    ...partners(lookup, manual: true),
                   ],
                   if (error != null)
                     Semantics(

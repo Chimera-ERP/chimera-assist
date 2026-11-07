@@ -20,6 +20,8 @@ import java.util.concurrent.Executors
 
 /** Flutter owns presentation; native code keeps browser proofs, tokens and Android lifecycle. */
 class MainActivity : FlutterActivity() {
+    private data class ManualResult(val session: Session, val phone: String, val lookup: Lookup)
+    @Volatile private var manualResult: ManualResult? = null
     private val store by lazy { SessionStore(this) }
     private val helper by lazy { HelperState(this) }
     private val browserLogin by lazy { BrowserLogin(this) }
@@ -64,7 +66,14 @@ class MainActivity : FlutterActivity() {
                         catch (error: RuntimeException) { helper.enabled = false; helper.report("start_blocked"); throw error }
                         reply.success(null)
                     }
-                    "openWorkspace" -> { AssistService.openWorkspace(); reply.success(null) }
+                    "openWorkspace" -> {
+                        if (!Settings.canDrawOverlays(this)) { reply.error("overlay_denied",null,null); return@setMethodCallHandler }
+                        if (call.argument<Boolean>("manual") == true) {
+                            val saved = requireNotNull(manualResult)
+                            AssistService.presentManual(this,saved.session,saved.phone,saved.lookup,requireNotNull(call.argument("kind")),requireNotNull(call.argument("id")))
+                        } else AssistService.openWorkspace(this,call.argument("kind"),call.argument("id"))
+                        reply.success(null)
+                    }
                     "disable" -> { disable(); reply.success(snapshot()) }
                     "testOverlay" -> {
                         require(store.read() != null && Settings.canDrawOverlays(this))
@@ -80,7 +89,11 @@ class MainActivity : FlutterActivity() {
                     "lookup" -> {
                         val session = requireNotNull(store.read())
                         val phone = PhoneNumbers.canonical(requireNotNull(call.argument<String>("phone")), helper.region())
-                        background(reply, session) { lookupMap(Api.lookup(SessionTokens(this).valid(session), phone)) }
+                        background(reply, session) {
+                            val result = Api.lookup(SessionTokens(this).valid(session), phone)
+                            if (session.sameLogin(store.read())) manualResult = ManualResult(session,phone,result)
+                            lookupMap(result)
+                        }
                     }
                     "rows", "detail" -> {
                         val session = requireNotNull(store.read())
@@ -90,8 +103,9 @@ class MainActivity : FlutterActivity() {
                     }
                     "login" -> {
                         check(!loginBusy)
+                        val origin = call.argument<String>("origin")?.let(Endpoint::origin)
+                        helper.rememberLogin(origin)
                         loginBusy = true
-                        val origin = call.argument<String>("origin")
                         val request = ++generation
                         worker.execute {
                             try {
@@ -139,14 +153,15 @@ class MainActivity : FlutterActivity() {
         } }
     }
     private fun disable() {
-        helper.enabled = false; AssistService.clear(); stopService(Intent(this, AssistService::class.java)); helper.report("stopped")
+        manualResult = null; helper.enabled = false; AssistService.clear(); stopService(Intent(this, AssistService::class.java)); helper.report("stopped")
         getSystemService(NotificationManager::class.java).cancel(2)
     }
     private fun ready() = checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED && Settings.canDrawOverlays(this) && getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING)
     private fun snapshot(consumeSelection: Boolean = false): Map<String, Any?> {
         val session = store.read()
+        helper.seedLogin(session)
         val manager = getSystemService(NotificationManager::class.java)
-        return mapOf("platform" to "android", "session" to session?.let { mapOf("origin" to it.origin, "organization" to it.organization) },
+        return mapOf("enterpriseOrigin" to helper.enterpriseOrigin, "enterpriseLogin" to helper.enterpriseLogin, "platform" to "android", "session" to session?.let { mapOf("origin" to it.origin, "organization" to it.organization) },
             "overlayAttached" to AssistService.overlayAttached(), "enabled" to helper.enabled, "running" to AssistService.running(), "role" to getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING),
             "roleAvailable" to getSystemService(RoleManager::class.java).isRoleAvailable(RoleManager.ROLE_CALL_SCREENING),
             "overlay" to Settings.canDrawOverlays(this), "contacts" to (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED),
@@ -163,14 +178,14 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { if (!isDestroyed && request == generation && session.sameLogin(store.read())) reply.success(value) else reply.error("cancelled", null, null) }
             } catch (error: Exception) {
                 runOnUiThread {
-                    if (error is ApiFailure && error.status == 401 && session.sameLogin(store.read())) { disable(); store.clear(); helper.report("session_expired") }
+                    if (error is ApiFailure && error.status == 401 && session.sameLogin(store.read())) { disable(); store.clear(); helper.report(SessionTokens.expiryCode(error)) }
                     reply.error(errorCode(error), null, null)
                 }
             }
         }
     }
     private fun errorCode(error: Exception) = when {
-        error is ApiFailure && error.status == 401 -> "session_expired"
+        error is ApiFailure && error.status == 401 -> SessionTokens.expiryCode(error)
         error is ApiFailure && error.status == 403 -> "forbidden"
         error is IllegalArgumentException || error is ApiFailure && error.status == 400 -> "invalid_phone"
         else -> "network_error"

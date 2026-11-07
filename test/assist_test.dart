@@ -57,6 +57,10 @@ void main() {
       expect(find.text('Chimera Cloud'), findsOneWidget);
       await tap(tester, 'Enterprise / Self-hosted');
       expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'https://',
+      );
+      expect(
         find.widgetWithText(TextField, 'Adresa serverului'),
         findsOneWidget,
       );
@@ -68,6 +72,53 @@ void main() {
       final i = bridge.calls.indexOf('login');
       expect(bridge.args[i], {'origin': 'https://erp.example.test'});
       expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'saved self-hosted destination survives logout, expiry and polling while editing',
+    (tester) async {
+      final bridge = FakeBridge();
+      bridge.state.addAll({
+        'enterpriseLogin': true,
+        'enterpriseOrigin': 'https://erp.example.test',
+      });
+      await mount(tester, bridge);
+      await tap(tester, 'Ieșire din cont');
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'https://erp.example.test',
+      );
+      await tester.enterText(
+        find.byType(TextField),
+        'https://another.example.test',
+      );
+      await tester.pump(const Duration(seconds: 2));
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'https://another.example.test',
+      );
+      await tester.pumpWidget(const SizedBox());
+      bridge.state['status'] = 'session_expired';
+      await mount(tester, bridge);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'https://erp.example.test',
+      );
+      await tap(tester, 'Autentificare');
+      expect(bridge.args[bridge.calls.indexOf('login')], {
+        'origin': 'https://erp.example.test',
+      });
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'legacy session explains the one-time login without exposing credentials',
+    (tester) async {
+      final bridge = FakeBridge('welcome');
+      bridge.state['status'] = 'session_upgrade_required';
+      await mount(tester, bridge);
+      expect(find.textContaining('o dată după actualizare'), findsOneWidget);
+      expect(find.text('Autentificare'), findsOneWidget);
     },
   );
   testWidgets(
@@ -107,22 +158,39 @@ void main() {
     },
   );
   testWidgets(
-    'manual lookup and partner actions remain usable on narrow screens',
+    'manual partner opens the real overlay instead of a full-screen record page',
     (tester) async {
       final bridge = FakeBridge();
       await mount(tester, bridge, ro: false);
       await tap(tester, 'Find in Chimera');
       await tap(tester, 'Furnizor demonstrativ · Supplier');
-      await tap(tester, 'Invoices');
-      expect(find.text('No records.'), findsOneWidget);
-      final i = bridge.calls.indexOf('rows');
+      final i = bridge.calls.indexOf('openWorkspace');
       expect(bridge.args[i], {
         'kind': 'supplier',
         'id': 'synthetic',
-        'action': 'invoices',
-        'offset': 0,
+        'manual': true,
       });
+      expect(bridge.calls, isNot(contains('rows')));
+      expect(find.text('Partners'), findsOneWidget);
+      expect(find.text('Invoices'), findsNothing);
       expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'current caller uses the overlay without resetting its saved action',
+    (tester) async {
+      final bridge = FakeBridge();
+      bridge.state['current'] = PreviewAssistBridge.matches;
+      await mount(tester, bridge);
+      await tap(tester, 'Furnizor demonstrativ · Furnizor');
+      final i = bridge.calls.indexOf('openWorkspace');
+      expect(bridge.args[i], {
+        'kind': 'supplier',
+        'id': 'synthetic',
+        'manual': false,
+      });
+      expect(find.text('Facturi'), findsNothing);
+      expect(bridge.calls, isNot(contains('rows')));
     },
   );
   testWidgets(

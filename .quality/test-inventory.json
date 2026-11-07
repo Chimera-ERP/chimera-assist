@@ -93,6 +93,24 @@
       ]
     },
     {
+      "id": "chimera-assist:101e3e3ef6f8931501f0",
+      "repository": "chimera-assist",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/HelperStateTest.kt",
+      "title": "HelperStateTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Persist self-hosted origin and explicit Cloud choice across logout/recreation; seed old sessions and reject unsafe origins",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Synthetic preferences; physical browser login acceptance separate"
+      ]
+    },
+    {
       "id": "chimera-assist:b2f46742a591e3591b2c",
       "repository": "chimera-assist",
       "source": "android/app/src/test/java/ro/chimeraerp/assist/PhoneNumbersTest.kt",
@@ -119,7 +137,7 @@
       "discovery": "declared-script",
       "runner": "gradle",
       "level": "unit",
-      "behavior": "Concurrent renewal runs once; logout and changed login cannot be overwritten or borrowed by stale requests",
+      "behavior": "Serialized renewal, logout and login boundaries, explicit legacy upgrade and retryable offline renewal preserving credentials",
       "ruleIds": [],
       "scenarioIds": [],
       "command": "./gradlew :app:testDebugUnitTest",

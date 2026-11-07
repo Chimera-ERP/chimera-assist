@@ -42,7 +42,7 @@
     <string name="next">Următoarele 25</string>
     <string name="invoiced_product">Produs facturat acestui client</string>
     <string name="outstanding">Rest de plată: %1$s %2$s</string>
-    <string name="open_partner">Deschide acțiunile partenerului Chimera. Apasă lung pentru închidere.</string>
+    <string name="open_partner">Deschide acțiunile partenerului în panoul plutitor.</string>
     <string name="collapse">Minimizează</string>
     <string name="close">Închide</string>
     <string name="login_browser">Finalizează autentificarea în browser, apoi revino în Assist.</string>
@@ -59,4 +59,5 @@
     <string name="identifying">Identific apelantul…</string>
     <string name="match_notification">Partener găsit. Apasă pentru detalii în Assist.</string>
     <string name="restart_required">Android a oprit asistentul. Deschide Assist pentru a-l relua.</string>
+    <string name="session_upgrade_required">Conectează-te o dată după actualizare pentru a activa reînnoirea sesiunii.</string>
 </resources>

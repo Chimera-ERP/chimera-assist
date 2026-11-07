@@ -42,7 +42,7 @@
     <string name="next">Next 25</string>
     <string name="invoiced_product">Product invoiced to this client</string>
     <string name="outstanding">Outstanding: %1$s %2$s</string>
-    <string name="open_partner">Open Chimera partner actions. Long press to dismiss.</string>
+    <string name="open_partner">Open partner actions in the floating panel.</string>
     <string name="collapse">Minimize</string>
     <string name="close">Close</string>
     <string name="login_browser">Finish authentication in your browser, then return to Assist.</string>
@@ -59,4 +59,5 @@
     <string name="identifying">Identifying the caller…</string>
     <string name="match_notification">Partner found. Tap to open details in Assist.</string>
     <string name="restart_required">Android stopped the helper. Open Assist to resume.</string>
+    <string name="session_upgrade_required">Sign in once after updating to enable session renewal.</string>
 </resources>

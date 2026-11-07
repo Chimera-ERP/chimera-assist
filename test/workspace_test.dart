@@ -44,6 +44,68 @@ Future<void> tapPanel(WidgetTester tester, String text) async {
 
 void main() {
   testWidgets(
+    'transparent space around the compact menu minimizes and keeps navigation',
+    (tester) async {
+      final bridge = WorkspaceFixture();
+      await mountPanel(tester, bridge, size: const Size(336, 460));
+      await tapPanel(tester, 'Facturi');
+      await tapPanel(tester, 'FCT 2026 / 1');
+      final saved = Map<String, dynamic>.from(
+        object(bridge.workspace['cursor']),
+      );
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pump();
+      expect(bridge.requests.last['method'], 'minimize');
+      expect(bridge.workspace['cursor'], saved);
+    },
+  );
+  testWidgets('large-text narrow menu keeps all touch targets usable', (
+    tester,
+  ) async {
+    final bridge = WorkspaceFixture();
+    final partner = objects(
+      object(bridge.workspace['lookup'])['partners'],
+    ).single;
+    partner['name'] = 'Furnizor demonstrativ cu denumire comercială lungă';
+    bridge.workspace['lookup'] = {
+      'partners': [partner],
+      'has_more': false,
+    };
+    await mountPanel(tester, bridge, scale: 2, size: const Size(320, 600));
+    for (final label in ['Facturi', 'Plăți', 'Produse']) {
+      final control = find
+          .ancestor(of: find.text(label), matching: find.byType(TextButton))
+          .first;
+      final size = tester.getSize(control);
+      expect(size.width, greaterThanOrEqualTo(48));
+      expect(size.height, greaterThanOrEqualTo(48));
+    }
+    expect(tester.takeException(), isNull, reason: 'scaled compact menu');
+    await tapPanel(tester, 'Facturi');
+    expect(find.text('FCT 2026 / 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('menu is compact and detail expansion stays bounded', (
+    tester,
+  ) async {
+    final bridge = WorkspaceFixture();
+    await mountPanel(tester, bridge, size: const Size(390, 844));
+    final surface = find
+        .ancestor(
+          of: find.text('Furnizor demonstrativ'),
+          matching: find.byType(Material),
+        )
+        .first;
+    expect(tester.getSize(surface).height, lessThan(240));
+    expect(find.textContaining('Alege o acțiune'), findsNothing);
+    await tapPanel(tester, 'Facturi');
+    expect(tester.getSize(surface).height, lessThan(480));
+    expect(find.text('FCT 2026 / 1'), findsOneWidget);
+    await tapPanel(tester, 'FCT 2026 / 1');
+    expect(tester.getSize(surface).height, lessThan(480));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
     'header actions, pagination and invoice detail stay in one floating workspace',
     (tester) async {
       final bridge = WorkspaceFixture();
@@ -162,8 +224,11 @@ void main() {
     (tester) async {
       final bridge = WorkspaceFixture();
       await mountPanel(tester, bridge, scale: 1.4);
+      expect(tester.takeException(), isNull, reason: "large text menu");
       await tapPanel(tester, 'Plăți');
+      expect(tester.takeException(), isNull, reason: 'payment list');
       await tapPanel(tester, 'Plată OP 1');
+      expect(tester.takeException(), isNull, reason: 'payment detail');
       expect(find.text('Sumă'), findsOneWidget);
       expect(find.text('OP-2026-001'), findsOneWidget);
       await tapPanel(tester, 'Produse');
