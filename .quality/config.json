@@ -8,7 +8,7 @@
     "quality:sql",
     "build"
   ],
-  "localGuidance": "Native Kotlin Android caller helper. ERP owns business data and SQL; Auth owns browser identity. Preserve PKCE, tenant scope, foreground/lock-screen boundaries and release signing identity. Read README.md. Commands: ./gradlew :app:testDebugUnitTest :app:lintDebug, npm test, npm run quality:check. Real-device and incoming-call acceptance is separate from automated tests.",
+  "localGuidance": "Flutter caller helper with native Android integration. ERP owns business data and SQL; Auth owns browser identity. Preserve PKCE, tenant scope, foreground/lock-screen boundaries and release signing identity. Read README.md. Commands: ./gradlew :app:testDebugUnitTest :app:lintDebug, npm test, npm run quality:check. Real-device and incoming-call acceptance is separate from automated tests.",
   "documents": {
     "README.md": {
       "classification": "current",
@@ -27,7 +27,7 @@
     }
   },
   "coverage": {
-    "app/src/test/java/ro/chimeraerp/assist/BrowserPolicyTest.kt": {
+    "android/app/src/test/java/ro/chimeraerp/assist/BrowserPolicyTest.kt": {
       "standalone": true,
       "runner": "gradle",
       "level": "unit",
@@ -37,7 +37,7 @@
         "Pure Android boundary tests; no physical call or browser return acceptance"
       ]
     },
-    "app/src/test/java/ro/chimeraerp/assist/EndpointTest.kt": {
+    "android/app/src/test/java/ro/chimeraerp/assist/EndpointTest.kt": {
       "standalone": true,
       "runner": "gradle",
       "level": "unit",
@@ -55,9 +55,56 @@
       "limitations": [
         "Synthetic badging/signature fixtures; actual APK independently checked before publication"
       ]
+    },
+    "android/app/src/test/java/ro/chimeraerp/assist/PhoneNumbersTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Canonical international/national number equivalence with explicit country context and no suffix guessing",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Robolectric/synthetic fixtures do not establish physical Telecom or Nothing OS acceptance"
+      ]
+    },
+    "android/app/src/test/java/ro/chimeraerp/assist/CallContextTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Pending call recovery, stale reply/session rejection and bounded in-memory context",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Robolectric/synthetic fixtures do not establish physical Telecom or Nothing OS acceptance"
+      ]
+    },
+    "android/app/src/test/java/ro/chimeraerp/assist/AssistServiceTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "integration",
+      "behavior": "Android15 simulated service: real overlay attachment, refusal diagnostics, canonical lookup, locked/unlocked context, sticky opt-in and network failure",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Robolectric/synthetic fixtures do not establish physical Telecom or Nothing OS acceptance"
+      ]
+    },
+    "test/assist_test.dart": {
+      "runner": "flutter",
+      "level": "component",
+      "behavior": "Cloud/enterprise privacy, setup/tests, narrow partner actions, session-loss late replies and visible error/empty states",
+      "command": "flutter test",
+      "limitations": [
+        "Synthetic native bridge; real browser redirect, telephony and overlay acceptance separate"
+      ]
     }
   },
   "releaseChecks": [
+    [
+      "flutter",
+      "analyze"
+    ],
+    [
+      "flutter",
+      "test"
+    ],
     [
       "npm",
       "test"

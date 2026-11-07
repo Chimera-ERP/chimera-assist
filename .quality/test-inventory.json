@@ -3,9 +3,27 @@
   "repository": "chimera-assist",
   "tests": [
     {
-      "id": "chimera-assist:bea59f405fa1253f2fd7",
+      "id": "chimera-assist:fe965a1101c6d1b9c613",
       "repository": "chimera-assist",
-      "source": "app/src/test/java/ro/chimeraerp/assist/BrowserPolicyTest.kt",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/AssistServiceTest.kt",
+      "title": "AssistServiceTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "integration",
+      "behavior": "Android15 simulated service: real overlay attachment, refusal diagnostics, canonical lookup, locked/unlocked context, sticky opt-in and network failure",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Robolectric/synthetic fixtures do not establish physical Telecom or Nothing OS acceptance"
+      ]
+    },
+    {
+      "id": "chimera-assist:ecf5304548db867fbd1d",
+      "repository": "chimera-assist",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/BrowserPolicyTest.kt",
       "title": "BrowserPolicyTest.kt",
       "line": 1,
       "discovery": "declared-script",
@@ -21,9 +39,27 @@
       ]
     },
     {
-      "id": "chimera-assist:f3194fa8f61dd92fe92d",
+      "id": "chimera-assist:d7cdfd9af347de3e1895",
       "repository": "chimera-assist",
-      "source": "app/src/test/java/ro/chimeraerp/assist/EndpointTest.kt",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/CallContextTest.kt",
+      "title": "CallContextTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Pending call recovery, stale reply/session rejection and bounded in-memory context",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Robolectric/synthetic fixtures do not establish physical Telecom or Nothing OS acceptance"
+      ]
+    },
+    {
+      "id": "chimera-assist:d57908a66f1da1580d3b",
+      "repository": "chimera-assist",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/EndpointTest.kt",
       "title": "EndpointTest.kt",
       "line": 1,
       "discovery": "declared-script",
@@ -36,6 +72,43 @@
       "metadataStatus": "documented",
       "limitations": [
         "Pure Android boundary tests; no physical call or browser return acceptance"
+      ]
+    },
+    {
+      "id": "chimera-assist:b2f46742a591e3591b2c",
+      "repository": "chimera-assist",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/PhoneNumbersTest.kt",
+      "title": "PhoneNumbersTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Canonical international/national number equivalence with explicit country context and no suffix guessing",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Robolectric/synthetic fixtures do not establish physical Telecom or Nothing OS acceptance"
+      ]
+    },
+    {
+      "id": "chimera-assist:59be1a22b0ea414c0e06",
+      "repository": "chimera-assist",
+      "source": "test/assist_test.dart",
+      "title": "assist_test.dart",
+      "line": 1,
+      "discovery": "native-file",
+      "runner": "flutter",
+      "level": "component",
+      "behavior": "Cloud/enterprise privacy, setup/tests, narrow partner actions, session-loss late replies and visible error/empty states",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "flutter test",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Synthetic native bridge; real browser redirect, telephony and overlay acceptance separate",
+        "Native file inventory; individual outcomes require Flutter reporter evidence."
       ]
     },
     {

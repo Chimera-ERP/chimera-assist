@@ -12,3 +12,10 @@ release/
 node_modules/
 .DS_Store
 *.log
+
+.dart_tool/
+.flutter-plugins-dependencies
+*.iml
+.runtime/
+
+android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java

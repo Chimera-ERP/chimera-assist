@@ -11,6 +11,10 @@ export function version(source) {
   if(names.length!==1||codes.length!==1||!Number.isSafeInteger(Number(codes[0][1])))throw Error('Expected one stable Android versionName/versionCode');
   return {name:names[0][1],code:Number(codes[0][1]),tag:`v${names[0][1]}`};
 }
+export function validateFlutterVersion(v,source) {
+  const entries=[...source.matchAll(/^version:\s*(\d+\.\d+\.\d+)\+([1-9]\d*)\s*$/gm)];
+  if(entries.length!==1||entries[0][1]!==v.name||Number(entries[0][2])!==v.code)throw Error('Flutter and Android release versions must match');
+}
 export function validateApk(v,badging,certificate) {
   const pkg = /^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'/m.exec(badging);
   const certs = [...certificate.matchAll(/^Signer #\d+ certificate SHA-256 digest: ([a-f0-9]+)$/gm)];
@@ -51,7 +55,8 @@ function plan(v) {
   return true;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
-  const v=version(readFileSync('app/build.gradle.kts','utf8'));
+  const v=version(readFileSync('android/app/build.gradle.kts','utf8'));
+  validateFlutterVersion(v,readFileSync('pubspec.yaml','utf8'));
   const mode=process.argv[2];
   if(mode==='plan'){
     const publish=plan(v);
@@ -64,7 +69,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     copyFileSync(apk,`release/chimera-assist-${v.name}.apk`);
     writeFileSync('release/assist-update.json',JSON.stringify(manifest,null,2)+'\n');
     writeFileSync('release/SHA256SUMS',`${manifest.sha256}  chimera-assist-${v.name}.apk\n`);
-    writeFileSync('release/notes.md',`Chimera Assist ${v.name} (Android build ${v.code}).\n\nBuilt by GitHub Actions from ${manifest.sourceCommit}.\n\nAndroid 10+ test release. Sign in through auth.chimeraerp.ro, grant caller identification and overlay permissions, then activate the assistant. No physical-device acceptance is claimed. Earlier locally signed debug builds must be uninstalled once before this first release-signed APK; future releases keep this signing identity. Business data stays in ERP.\n\nAPK SHA256: \`${manifest.sha256}\`\n`);
+    writeFileSync('release/notes.md',`Chimera Assist ${v.name} (Android build ${v.code}).\n\nBuilt by GitHub Actions from ${manifest.sourceCommit}.\n\nAndroid 10+ test release with shared Flutter UI, caller diagnostics, circle/number tests and international number normalization. Sign in through auth.chimeraerp.ro, grant caller identification and overlay permissions, then activate the assistant. Use Test the circle first, then Test with this number. For Tabu choose Enterprise / Self-hosted and https://erp.tabusociety.ro. iOS host is preparation only. No physical-device acceptance is claimed. Earlier locally signed debug builds must be uninstalled once before this first release-signed APK; future releases keep this signing identity. Business data stays in ERP.\n\nAPK SHA256: \`${manifest.sha256}\`\n`);
     console.log(JSON.stringify(manifest));
   }else throw Error('Expected plan or package');
 }

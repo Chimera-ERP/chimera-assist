@@ -1,9 +1,9 @@
 # Chimera Assist
 
-Status: Android test releases; physical-device acceptance remains pending.
+Status: Flutter Android test releases; physical-device acceptance remains pending. iOS host is preparation only.
 Owner: Chimera mobile and ERP maintainers. Android ID: `ro.chimeraerp.assist`.
 Business contract: [MDM-AST-001](https://github.com/Chimera-ERP/chimera/blob/main/docs/business-rules/master-data.md#assist-phone-discovery).
-Current work and evidence remain in the ERP [handoff](https://github.com/Chimera-ERP/chimera/blob/main/docs/development/verification-checklist.md#android-identity-and-chimera-assist--2026-11-05).
+Current work and evidence remain in the ERP [handoff](https://github.com/Chimera-ERP/chimera/blob/main/docs/development/verification-checklist.md#assist-call-delivery-diagnostics-and-flutter--2026-11-07).
 
 
 ## Download and repository
@@ -21,7 +21,7 @@ first release APK; Android cannot update across different certificates. This
 clears only the app's local session/settings. Subsequent release APKs retain the
 same certificate and can update in place. Android package: `ro.chimeraerp.assist`.
 
-## First version
+## Flutter app and caller diagnostics
 
 The welcome screen defaults to **Chimera Cloud** with a **Log in** button.
 No ERP address is required. Auth opens in the system browser at
@@ -69,10 +69,29 @@ a user-visible `specialUse` foreground service. A persistent notification provid
 a stop action. There is no boot receiver, default-dialer replacement, call-log
 permission, microphone access, accessibility service or call recording.
 
-`CallScreeningService` immediately allows an incoming call, without waiting for
-network I/O. The already activated service performs an exact, authenticated ERP
-lookup. It clears earlier call context before every lookup; late replies cannot
-replace a newer call or a different session. A recognized partner displays the
+`CallScreeningService` enqueues the event while Telecom still holds its binding,
+then immediately allows the call in a `finally` block, without waiting for network
+I/O. The user-enabled foreground service requests system restart with
+`START_STICKY`; Stop/logout revoke that choice. Reopening the visible app resumes
+an enabled helper. A cold callback attempts foreground-service delivery while
+bound; Android refusal is caught and reported with an actionable notification.
+There is no background activity launch or permission bypass.
+
+A single five-minute in-memory call context survives service recreation within
+the same process, screen locking and activity navigation. Late replies cannot
+replace a newer call or a different session. Locking hides the overlay; unlocking
+may restore an unexpired matching context. Process death clears private call data.
+The Flutter home screen exposes the current result, so opening Assist during a
+call does not require tapping the circle. Notifications contain operational text,
+never numbers, names or financial data. The last callback time and result category
+are retained locally for diagnosis; no phone history is persisted.
+
+**Test the circle** exercises the real Android overlay without a lookup or call.
+**Test with this number** uses the same normalization, lookup and overlay path as
+an incoming call. Neither test proves Telecom/OEM callback delivery. The permission
+checklist shows caller role, overlay, saved-number permission and notification
+channel status independently. If a dialer suppresses overlays, the current context
+remains accessible inside Assist and through its notification. A recognized partner displays the
 Chimera logo bubble. Drag to reposition and tap to expand; long press or Close dismisses it. More than
 one partner requires a choice. Supplier actions read supplier invoices, recorded
 payments and active supplied products. Client actions read location-scoped
@@ -80,7 +99,7 @@ invoices, permitted invoice/standalone payments and products appearing on issued
 invoices. Amounts come from stored documents or existing supplier routines.
 No payment, invoice, order or external message is created.
 
-The panel offers the existing permitted actions; tapping one opens native lists
+The panel offers the existing permitted actions; tapping one opens Flutter lists
 with25 rows per page, loading/error/retry/empty states. Manual number lookup is
 available from the home screen. UI text is English/Romanian according to Android
 locale. The logo is the existing Chimera artwork copied from Companion's
@@ -88,9 +107,9 @@ locale. The logo is the existing Chimera artwork copied from Companion's
 
 ## Boundaries and device acceptance
 
-Android10+ (API29), target36. Enable the helper again after force-stop, reboot or
-OS process termination. It intentionally does not attempt a restricted background
-foreground-service launch. Incoming calls only; hidden numbers and non-telephony
+Android10+ (API29), target36. After force-stop or reboot, open Assist to resume the enabled helper. Ordinary
+system service reclamation can restart the opted-in foreground service; OEM policy
+may still prevent it. A refused background start is reported, never bypassed. Incoming calls only; hidden numbers and non-telephony
 calls are not identified. Offline or unknown callers produce no bubble. One app
 can hold the caller-ID role at a time. The bubble is not shown over the lock screen
 and is removed on screen-off, dismissal, a new call, logout, service stop or after
@@ -98,8 +117,16 @@ five minutes. Telecom screening does not expose a call-ended event; this version
 uses explicit dismissal/expiry instead. Expanded panels have a bounded scroll area.
 No identity or financial content appears in the notification or recent-app capture.
 
-Numbers in national format are interpreted as Romanian; other countries require
-an international prefix. There is no cross-company matching or peer-system data
+Google libphonenumber9.0.43 normalizes complete numbers to E.164 before lookup.
+Explicit `+`/`00` international prefixes win; national numbers use the user-selected
+country or, in automatic mode, network country, SIM country, then phone locale.
+The chosen country is visible and editable. No country is silently forced to RO.
+Roaming/multiple-SIM or missing country context can be ambiguous: select the
+appropriate country or use an international number. Short/partial numbers,
+extensions and malformed input fail explicitly; suffix/fuzzy matching is forbidden.
+ERP supplier contacts already accept any international prefix, not only `+40`.
+The legacy ERP endpoint still supports Romanian national input for compatibility;
+this app sends canonical global numbers. There is no cross-company matching or peer-system data
 exchange. Shared numbers return up to20 permitted partners with `has_more`.
 Unassigned-location client documents are excluded, not treated as globally visible.
 Phone identity is a navigation hint, never proof of the caller's identity.
@@ -113,17 +140,37 @@ trials do not replace them.
 
 ## Build and backend
 
-Use Java17 and an Android SDK containing platform36:
+Use Flutter3.44.3, Java17 and an Android SDK containing platform36:
 
 ```sh
-./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --debug
+./gradlew :app:testDebugUnitTest :app:lintDebug
 ```
 
 Set `JAVA_HOME`/`ANDROID_HOME` for your machine; do not commit `local.properties`,
-keystores or credentials. Output: `app/build/outputs/apk/debug/app-debug.apk`.
-Release signing and publication use the dedicated GitHub Actions workflow below. Gradle wrapper9.1.0 is reused from
-Companion; Android Gradle Plugin9.0.1 supplies built-in Kotlin support. No Flutter
-or hardware adapter dependency is included.
+keystores or credentials. Output: `build/app/outputs/flutter-apk/app-debug.apk`.
+Release signing and publication use the dedicated GitHub Actions workflow below.
+The shared Flutter UI is in `lib/`; Android services, AppAuth and Keystore storage
+are in `android/app/`. Flutter receives session display metadata and scoped API
+results, never tokens or PKCE proofs. Gradle9.1.0/AGP9.0.1 use Flutter3.44's
+compatibility flags (`android.newDsl=false`, `android.builtInKotlin=false`) and
+Kotlin2.3.20. Resource-enabled Robolectric API35 tests explicitly depend on Flutter
+asset copying; this does not bypass the Android runtime or release checks.
+
+The `ios/` host shares the UI and bundle ID but deliberately reports unsupported
+native operations. It does not claim working browser login, caller-ID extensions
+or Android-style overlays on iOS. Apple Call Directory/Live Caller ID require their
+own native/server integration and acceptance. Full Xcode/signing are also required.
+See [Apple's extension contract](https://developer.apple.com/documentation/identitylookup/getting-up-to-date-calling-and-blocking-information-for-your-app).
+
+For synthetic browser UI inspection only:
+`flutter run -d web-server --dart-define=ASSIST_PREVIEW=true`.
+Preview fixtures require debug mode and never call a live ERP. Query states:
+`welcome`, `setup`, `matched`, `empty`, `loading`, `error`. The release ignores this
+preview flag. Browser inspection and Robolectric are not physical Android evidence.
 
 ERP migration `sql/323_assist.sql` adds indexed phone normalization and read-only
 domain functions; all three core install paths include it. Apply through the
@@ -178,8 +225,9 @@ and [RFC8252](https://www.rfc-editor.org/rfc/rfc8252.html).
 ## Automated Android releases
 
 Like Companion, pushes and pull requests run verification. A new stable
-`versionName` and increasing `versionCode` in `app/build.gradle.kts` on `main`
-build and publish a signed release after unit tests, Android lint and package /
+`versionName` and increasing `versionCode` in `android/app/build.gradle.kts` on `main`
+and the matching `pubspec.yaml` version build and publish a signed release after
+Flutter analysis/widget tests, native unit/service tests, Android lint and package /
 version / certificate checks. The workflow pins its actions, Java17, Android36
 and Gradle wrapper. Commits without a new version do not replace a published APK.
 Releases contain the APK, `assist-update.json`, `SHA256SUMS` and a GitHub build
@@ -198,8 +246,8 @@ npm test
 npm run quality:check
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 # With the four ASSIST signing environment values supplied securely:
-./gradlew :app:assembleRelease
-gh attestation verify chimera-assist-0.1.2.apk --repo Chimera-ERP/chimera-assist
+flutter build apk --release
+gh attestation verify chimera-assist-0.2.0.apk --repo Chimera-ERP/chimera-assist
 ```
 
 An interrupted release remains a draft and must be reconciled before retrying.

@@ -32,6 +32,15 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Install pinned Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build apk --debug
       - run: npm run quality:check
       - run: npm test
       - name: Android regression and lint
@@ -71,6 +80,14 @@ jobs:
       - name: Install pinned Android SDK
         if: steps.plan.outputs.publish == 'true'
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: steps.plan.outputs.publish == 'true'
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        if: steps.plan.outputs.publish == 'true'
       - name: Restore persistent signing identity
         if: steps.plan.outputs.publish == 'true'
         env:
@@ -90,13 +107,13 @@ jobs:
           ASSIST_KEYSTORE_PASSWORD: ${{ secrets.ASSIST_KEYSTORE_PASSWORD }}
           ASSIST_KEY_ALIAS: ${{ secrets.ASSIST_KEY_ALIAS }}
           ASSIST_KEY_PASSWORD: ${{ secrets.ASSIST_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --max-workers=2 --console=plain
+        run: flutter build apk --release
       - name: Verify package, version, certificate and manifest
         if: steps.plan.outputs.publish == 'true'
         run: |
           export AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
           export APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          node tool/release.mjs package app/build/outputs/apk/release/app-release.apk
+          node tool/release.mjs package build/app/outputs/flutter-apk/app-release.apk
       - name: Attest APK build provenance
         if: steps.plan.outputs.publish == 'true'
         id: attest

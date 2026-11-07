@@ -45,4 +45,4 @@ Local hooks can be bypassed. Automated checks validate structure, references and
 
 ## Repository guidance
 
-Native Kotlin Android caller helper. ERP owns business data and SQL; Auth owns browser identity. Preserve PKCE, tenant scope, foreground/lock-screen boundaries and release signing identity. Read README.md. Commands: ./gradlew :app:testDebugUnitTest :app:lintDebug, npm test, npm run quality:check. Real-device and incoming-call acceptance is separate from automated tests.
+Flutter caller helper with native Android integration. ERP owns business data and SQL; Auth owns browser identity. Preserve PKCE, tenant scope, foreground/lock-screen boundaries and release signing identity. Read README.md. Commands: ./gradlew :app:testDebugUnitTest :app:lintDebug, npm test, npm run quality:check. Real-device and incoming-call acceptance is separate from automated tests.
