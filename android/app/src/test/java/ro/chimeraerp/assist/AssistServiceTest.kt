@@ -116,4 +116,33 @@ class AssistServiceTest {
         assertEquals(cursor,AssistService.calls.cursor(session))
         assertNull(shadowOf(service).nextStartedActivity)
     }
+
+    @Test fun changingCallerAndExpiryDiscardPausedPixelsButPreserveUnexpiredNavigation() {
+        var created=0; var destroyed=0
+        service.panelFactory={ created++; object:PanelSurface {
+            override val view:View=FrameLayout(service)
+            override fun visible(value:Boolean) {}
+            override fun destroy() { destroyed++ }
+        } }
+        service.lookupRequest={_,_->match}
+        service.onStartCommand(Intent().setAction("lookup").putExtra("phone","+442079460123"),0,1)
+        await { AssistService.calls.result(session)!=null }
+        val cursor=CallContext.Cursor("supplier","synthetic","invoices",25,"invoice_1")
+        AssistService.calls.navigate(session,AssistService.calls.id(session)!!,cursor)
+        service.expand();service.minimize()
+        service.onStartCommand(Intent().setAction("lookup").putExtra("phone","+40700000001"),0,2)
+        assertEquals(1,destroyed)
+        await { AssistService.calls.result(session)!=null }
+        service.expand();service.minimize()
+        service.onStartCommand(Intent().setAction("lookup").putExtra("phone","+442079460123"),0,3)
+        await { AssistService.calls.result(session)!=null }
+        assertEquals(cursor,AssistService.calls.cursor(session))
+        service.expand();service.minimize()
+        assertEquals(3,created);assertEquals(2,destroyed)
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMinutes(31))
+        ShadowLooper.idleMainLooper(2,java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(3,destroyed)
+        assertFalse(AssistService.overlayAttached())
+        assertNull(AssistService.calls.current(session))
+    }
 }

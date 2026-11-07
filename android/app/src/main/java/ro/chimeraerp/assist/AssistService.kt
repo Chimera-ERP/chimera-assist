@@ -29,6 +29,7 @@ class AssistService : Service() {
     private var panelSurface: PanelSurface? = null
     private var panelContainer: View? = null
     private var panelHeight = 310
+    private var panelContextId: Long? = null
     private var expanded = false
     private var demo = false
     private var bubbleX = 12
@@ -44,7 +45,7 @@ class AssistService : Service() {
     private val maintenance = object : Runnable {
         override fun run() {
             updateCallState()
-            if (!demo && calls.current(readSession()) == null) dismiss()
+            if (!demo && calls.current(readSession()) == null) releasePanel()
             handler.postDelayed(this, 2000)
         }
     }
@@ -82,7 +83,7 @@ class AssistService : Service() {
             state.enabled = false; calls.clear(); state.report("stopped"); stopSelf(); return START_NOT_STICKY
         }
         when (intent?.action) {
-            "test-overlay" -> { demo = true; report("testing", R.string.test_success); bubble(null) }
+            "test-overlay" -> { releasePanel(); demo = true; report("testing", R.string.test_success); bubble(null) }
             "lookup" -> intent.getStringExtra("phone")?.let { phone -> readSession()?.let { lookup(calls.begin(phone, state.region(), it)) } }
             else -> {
                 val event = calls.current(readSession())
@@ -96,9 +97,9 @@ class AssistService : Service() {
     }
     override fun onDestroy() {
         if (active?.get() === this) active = null
-        generation++; dismiss(); handler.removeCallbacksAndMessages(null)
+        generation++; releasePanel(); handler.removeCallbacksAndMessages(null)
         unregisterReceiver(receiver); unregisterReceiver(phoneReceiver); worker.shutdownNow(); dataWorker.shutdownNow()
-        panelSurface?.destroy(); panelSurface = null; super.onDestroy()
+        super.onDestroy()
     }
     private fun locked() = getSystemService(KeyguardManager::class.java).isKeyguardLocked
     private fun report(code: String, message: Int) {
@@ -108,6 +109,8 @@ class AssistService : Service() {
     private fun lookup(event: CallContext.Event) {
         val request = ++generation
         demo = false; updateCallState(); expanded = calls.expanded(readSession())
+        // A paused renderer must never flash the previous caller before its next bridge poll.
+        if (panelContextId != calls.id(readSession())) releasePanel()
         if (!expanded) dismiss()
         report("looking", R.string.identifying)
         worker.execute {
@@ -140,6 +143,9 @@ class AssistService : Service() {
         }
     }
     private fun dismiss() { panelSurface?.visible(false); overlay?.let { try { windows.removeView(it) } catch (_: IllegalArgumentException) {} }; overlay = null }
+    private fun releasePanel() {
+        dismiss(); panelSurface?.destroy(); panelSurface = null; panelContainer = null; panelContextId = null
+    }
     private fun attach(view: View, width: Int, height: Int) {
         dismiss()
         if (locked()) { state.report("locked"); return }
@@ -190,7 +196,7 @@ class AssistService : Service() {
         if (locked()) { dismiss(); return }
         expanded = true
         if (!demo) calls.expanded(readSession(),true)
-        if (panelSurface == null) panelSurface = panelFactory()
+        if (panelSurface == null) { panelSurface = panelFactory(); panelContextId = if (demo) null else calls.id(readSession()) }
         if (panelContainer == null) {
             panelContainer = object : FrameLayout(this) {
                 override fun dispatchTouchEvent(event: MotionEvent): Boolean {

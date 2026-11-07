@@ -120,7 +120,9 @@ The rounded floating Flutter panel keeps permitted actions in its header. Action
 expand downward into lists with25 rows per page; selecting an invoice, payment or
 product opens individual details inside the same window, with paginated invoice
 lines and return to the previous list page/scroll. It never launches a full-screen
-activity. Loading/error/retry/empty states retain the header. Manual number lookup is
+activity. A paused renderer is discarded when switching callers or expiring, so
+old pixels cannot appear before the next workspace read. Navigation is restored
+from the per-caller context. Loading/error/retry/empty states retain the header. Manual number lookup is
 available from the home screen. UI text is English/Romanian according to Android
 locale. The logo is the existing Chimera artwork copied from Companion's
 `design/companion-motion/chimera.png`, not a replacement brand asset.
