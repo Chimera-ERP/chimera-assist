@@ -70,7 +70,7 @@
       "standalone": true,
       "runner": "gradle",
       "level": "unit",
-      "behavior": "Pending call recovery, stale reply/session rejection and bounded in-memory context",
+      "behavior": "Canonical per-caller cursor restoration, active-call retention and 30-minute inactivity expiry, stale reply and login boundaries",
       "command": "./gradlew :app:testDebugUnitTest",
       "limitations": [
         "Robolectric/synthetic fixtures do not establish physical Telecom or Nothing OS acceptance"
@@ -80,7 +80,7 @@
       "standalone": true,
       "runner": "gradle",
       "level": "integration",
-      "behavior": "Android15 simulated service: real overlay attachment, refusal diagnostics, canonical lookup, locked/unlocked context, sticky opt-in and network failure",
+      "behavior": "Android15 simulated service: real overlay attachment, refusal diagnostics, canonical lookup, locked/unlocked context, sticky opt-in and network failure; outside-tap minimization retains one embedded panel without launching an activity",
       "command": "./gradlew :app:testDebugUnitTest",
       "limitations": [
         "Robolectric/synthetic fixtures do not establish physical Telecom or Nothing OS acceptance"
@@ -103,6 +103,25 @@
       "command": "./gradlew :app:testDebugUnitTest",
       "limitations": [
         "Robolectric API35 activity lifecycle; no real browser, token exchange or physical Nothing Phone acceptance"
+      ]
+    },
+    "android/app/src/test/java/ro/chimeraerp/assist/SessionTokensTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Concurrent renewal runs once; logout and changed login cannot be overwritten or borrowed by stale requests",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Injected renewal boundary; real provider rotation covered in Auth integration, physical device acceptance separate"
+      ]
+    },
+    "test/workspace_test.dart": {
+      "runner": "flutter",
+      "level": "component",
+      "behavior": "Inline lists/details/pagination, caller A-B-A restoration, stale responses, minimized context, loading/empty/error and large-text layout",
+      "command": "flutter test",
+      "limitations": [
+        "Synthetic native bridge; actual Android WindowManager and physical Telecom acceptance separate"
       ]
     }
   },

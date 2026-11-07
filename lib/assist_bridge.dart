@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -43,6 +44,7 @@ class PreviewAssistBridge implements AssistBridge {
     'role': scenario != 'setup',
     'overlay': scenario != 'setup',
     'contacts': scenario != 'setup',
+    'phoneState': scenario != 'setup',
     'notifications': scenario != 'setup',
     'country': 'RO',
     'status': scenario == 'error'
@@ -64,6 +66,14 @@ class PreviewAssistBridge implements AssistBridge {
       },
     ],
     'has_more': false,
+  };
+  late Json workspace = {
+    'id': 1,
+    'revision': 1,
+    'lookup': matches,
+    'cursor': {},
+    'status': 'matched',
+    'demo': scenario == 'demo',
   };
   @override
   Future<Object?> call(String method, [Json arguments = const {}]) async {
@@ -92,8 +102,91 @@ class PreviewAssistBridge implements AssistBridge {
         return scenario == 'empty'
             ? {'partners': [], 'has_more': false}
             : matches;
+      case 'workspace':
+        return workspace;
+      case 'navigate':
+        workspace['cursor'] = {...arguments};
+        return null;
       case 'rows':
-        return {'rows': [], 'has_more': false};
+        if (scenario == 'panel-loading') return Completer<Object?>().future;
+        if (scenario == 'panel-error') {
+          throw PlatformException(code: 'network_error');
+        }
+        if (!scenario.startsWith('panel') || scenario == 'panel-empty') {
+          return {'rows': [], 'has_more': false};
+        }
+        final start = (arguments['offset'] as num?)?.toInt() ?? 0;
+        final action = arguments['action'];
+        return {
+          'rows': List.generate(
+            start == 0 ? 25 : 3,
+            (i) => {
+              'id': 'synthetic_${start + i}',
+              'label': action == 'products'
+                  ? 'Făină pentru patiserie ${start + i + 1}'
+                  : action == 'payments'
+                  ? 'Plată OP ${start + i + 1}'
+                  : 'FCT 2026 / ${start + i + 1}',
+              'detail': action == 'products'
+                  ? 'SAC 25 KG · Produs activ'
+                  : '07.11.2026 · Înregistrată',
+              'amount': action == 'products' ? null : '1240.00',
+              'currency': action == 'products' ? null : 'RON',
+              if (action == 'invoices') 'outstanding': '840.00',
+            },
+          ),
+          'has_more': start == 0,
+        };
+      case 'detail':
+        final action = arguments['action'];
+        final record =
+            (int.tryParse(arguments['item'].toString().split('_').last) ?? 0) +
+            1;
+        return {
+          'id': arguments['item'],
+          'title': action == 'products'
+              ? 'Făină pentru patiserie'
+              : action == 'payments'
+              ? 'Plată OP 1'
+              : 'FCT 2026 / $record',
+          'fields': action == 'products'
+              ? [
+                  {
+                    'key': 'description',
+                    'value': 'Făină albă pentru patiserie, ambalată în saci.',
+                  },
+                  {'key': 'unit', 'value': 'kg'},
+                  {'key': 'pack_size', 'value': '25'},
+                  {'key': 'minimum_order_quantity', 'value': '50'},
+                ]
+              : [
+                  {'key': 'date', 'value': '07.11.2026'},
+                  {
+                    'key': action == 'payments' ? 'amount' : 'total',
+                    'value': '1240.00',
+                  },
+                  {'key': 'currency', 'value': 'RON'},
+                  if (action == 'invoices')
+                    {'key': 'outstanding', 'value': '840.00'},
+                  if (action == 'payments')
+                    {'key': 'reference', 'value': 'OP-2026-001'},
+                ],
+          'lines': action != 'invoices'
+              ? []
+              : List.generate(
+                  3,
+                  (i) => {
+                    'id': 'line_$i',
+                    'label': 'Produs demonstrativ ${i + 1}',
+                    'fields': [
+                      {'key': 'quantity', 'value': '10'},
+                      {'key': 'unit_price', 'value': '20.00'},
+                      {'key': 'total_price', 'value': '200.00'},
+                    ],
+                  },
+                ),
+          'has_more': action == 'invoices' && arguments['offset'] == 0,
+        };
       case 'region':
         state['country'] = arguments['country'] ?? 'RO';
         state['countryOverride'] = arguments['country'];

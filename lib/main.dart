@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'assist_bridge.dart';
+import 'workspace.dart';
 
 void main() {
   const preview = bool.fromEnvironment('ASSIST_PREVIEW');
@@ -12,6 +13,10 @@ void main() {
   }
   runApp(
     AssistApp(
+      romanian:
+          kDebugMode && preview && Uri.base.queryParameters['lang'] == 'ro'
+          ? true
+          : null,
       bridge: kDebugMode && preview
           ? PreviewAssistBridge(Uri.base.queryParameters['state'] ?? 'setup')
           : NativeAssistBridge(),
@@ -26,6 +31,7 @@ class AssistApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Chimera Assist',
+    initialRoute: '/',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,
@@ -35,7 +41,18 @@ class AssistApp extends StatelessWidget {
         border: OutlineInputBorder(),
       ),
     ),
-    home: AssistHome(bridge: bridge, romanian: romanian),
+    home:
+        kDebugMode &&
+            const bool.fromEnvironment('ASSIST_PREVIEW') &&
+            Uri.base.queryParameters['overlay'] == '1'
+        ? WorkspacePreview(bridge: bridge, romanian: romanian)
+        : WidgetsBinding.instance.platformDispatcher.defaultRouteName ==
+              '/overlay'
+        ? Scaffold(
+            backgroundColor: Colors.transparent,
+            body: CallerWorkspace(bridge: bridge, romanian: romanian),
+          )
+        : AssistHome(bridge: bridge, romanian: romanian),
   );
 }
 
@@ -55,18 +72,11 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
   String? error;
   int request = 0;
   String page = 'home';
-  Json? lookup, partner, rows;
-  String? action;
-  int offset = 0;
+  Json? lookup, partner;
   bool get ro =>
       widget.romanian ??
       WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'ro';
   String t(String romanian, String english) => ro ? romanian : english;
-  String label(String action) => switch (action) {
-    'invoices' => t('Facturi', 'Invoices'),
-    'payments' => t('Plăți', 'Payments'),
-    _ => t('Produse', 'Products'),
-  };
   @override
   void initState() {
     super.initState();
@@ -116,18 +126,9 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
           request++;
           busy = false;
           page = 'home';
-          lookup = partner = rows = null;
+          lookup = partner = null;
         }
       });
-      if (next['selection'] != null) {
-        partner = object(next['selection']);
-        final selectedAction = next['selectedAction'] as String?;
-        if (selectedAction != null) {
-          await showRows(selectedAction, 0);
-        } else {
-          setState(() => page = 'partner');
-        }
-      }
     } on PlatformException catch (e) {
       if (mounted) setState(() => error = e.code);
     } finally {
@@ -372,26 +373,6 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
       });
     }
   });
-  Future<void> showRows(String selected, int start) => perform(() async {
-    final current = partner;
-    if (current == null) return;
-    final id = ++request;
-    setState(() {
-      action = selected;
-      offset = start;
-      page = 'rows';
-      rows = null;
-    });
-    final result = object(
-      await widget.bridge.call('rows', {
-        'kind': current['kind'],
-        'id': current['id'],
-        'action': selected,
-        'offset': start,
-      }),
-    );
-    if (mounted && id == request) setState(() => rows = result);
-  });
   List<Widget> partners(Json? value) => [
     if (objects(value?['partners']).isEmpty) Text(message('no_match')),
     for (final item in objects(value?['partners']))
@@ -526,6 +507,10 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
       if (state?['current'] != null) ...[
         heading(t('Contextul apelului', 'Call context')),
         ...partners(object(state?['current'])),
+        button(
+          t('Deschide panoul plutitor', 'Open floating panel'),
+          () => command('openWorkspace'),
+        ),
       ],
       if (state?['current'] != null)
         Text(
@@ -540,7 +525,9 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
             : t('Activează asistentul', 'Activate assistant'),
         state?['enabled'] == true
             ? () => command('disable')
-            : state?['role'] == true && state?['overlay'] == true
+            : state?['role'] == true &&
+                  state?['overlay'] == true &&
+                  state?['phoneState'] == true
             ? () => command('enable')
             : null,
         primary: true,
@@ -552,8 +539,8 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
       ),
       Text(
         t(
-          'Testul cercului nu face un apel și nu caută date. Apasă cercul pentru a-l deschide; apasă lung pentru a-l închide.',
-          'The circle test makes no call and looks up no data. Tap the circle to open it; long press to dismiss.',
+          'Testul cercului nu face un apel și nu caută date. Apasă cercul pentru a-l deschide; atinge în afara panoului pentru a-l minimiza.',
+          'The circle test makes no call and looks up no data. Tap the circle to open it; tap outside the panel to minimize.',
         ),
       ),
       heading(t('Permisiuni Android', 'Android permissions')),
@@ -576,6 +563,14 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
         t(
           'Necesară pentru cercul Chimera.',
           'Required for the Chimera circle.',
+        ),
+      ),
+      permission(
+        'phoneState',
+        t('Starea apelului', 'Call status'),
+        t(
+          'Păstrează contextul pe toată durata apelului și încă 30 de minute după.',
+          'Keep context throughout the call and for 30 minutes afterwards.',
         ),
       ),
       permission(
@@ -671,7 +666,7 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(page == 'rows' ? label(action!) : 'Chimera Assist'),
+          title: const Text('Chimera Assist'),
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(4),
             child: busy
@@ -710,59 +705,17 @@ class _AssistHomeState extends State<AssistHome> with WidgetsBindingObserver {
                   else if (page == 'lookup') ...[
                     heading(t('Parteneri', 'Partners')),
                     ...partners(lookup),
-                  ] else if (page == 'partner') ...[
-                    heading(partner?['name'] as String? ?? ''),
-                    Text(partner?['tax_id'] as String? ?? ''),
-                    if ((partner?['actions'] as List? ?? []).isEmpty)
-                      Text(
-                        t(
-                          'Contul nu are acțiuni disponibile.',
-                          'No actions available for your account.',
-                        ),
+                  ] else if (page == 'partner' && partner != null) ...[
+                    SizedBox(
+                      height: (MediaQuery.sizeOf(context).height - 160).clamp(
+                        420,
+                        650,
                       ),
-                    for (final a
-                        in (partner?['actions'] as List? ?? []).cast<String>())
-                      button(label(a), () => showRows(a, 0)),
-                  ] else if (page == 'rows') ...[
-                    Text(
-                      partner?['name'] as String? ?? '',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    gap(),
-                    if (rows != null && objects(rows?['rows']).isEmpty)
-                      Text(
-                        t(
-                          'Nu există înregistrări disponibile.',
-                          'No records available.',
-                        ),
+                      child: RecordWorkspace(
+                        bridge: widget.bridge,
+                        partners: [partner!],
+                        romanian: ro,
                       ),
-                    for (final row in objects(rows?['rows'])) ...[
-                      Text(
-                        row['label'] as String? ?? '',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text(row['detail'] as String? ?? ''),
-                      if (row['amount'] != null)
-                        Text('${row['amount']} ${row['currency'] ?? ''}'),
-                      if (row['outstanding'] != null)
-                        Text(
-                          '${t('Rest de plată', 'Outstanding')}: ${row['outstanding']} ${row['currency'] ?? ''}',
-                        ),
-                      const Divider(),
-                    ],
-                    if (offset > 0)
-                      button(
-                        t('Precedentele 25', 'Previous 25'),
-                        () => showRows(action!, offset - 25),
-                      ),
-                    if (rows?['has_more'] == true && offset < 10000)
-                      button(
-                        t('Următoarele 25', 'Next 25'),
-                        () => showRows(action!, offset + 25),
-                      ),
-                    button(
-                      t('Reîncearcă', 'Retry'),
-                      () => showRows(action!, offset),
                     ),
                   ],
                   if (error != null)

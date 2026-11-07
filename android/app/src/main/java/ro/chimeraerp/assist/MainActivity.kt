@@ -48,6 +48,7 @@ class MainActivity : FlutterActivity() {
                                 startActivityForResult(manager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING), 1)
                             }
                             "overlay" -> startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                            "phoneState" -> requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), 4)
                             "contacts" -> requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 2)
                             "notifications" -> if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
                                 requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 3)
@@ -63,6 +64,7 @@ class MainActivity : FlutterActivity() {
                         catch (error: RuntimeException) { helper.enabled = false; helper.report("start_blocked"); throw error }
                         reply.success(null)
                     }
+                    "openWorkspace" -> { AssistService.openWorkspace(); reply.success(null) }
                     "disable" -> { disable(); reply.success(snapshot()) }
                     "testOverlay" -> {
                         require(store.read() != null && Settings.canDrawOverlays(this))
@@ -78,13 +80,13 @@ class MainActivity : FlutterActivity() {
                     "lookup" -> {
                         val session = requireNotNull(store.read())
                         val phone = PhoneNumbers.canonical(requireNotNull(call.argument<String>("phone")), helper.region())
-                        background(reply, session) { lookupMap(Api.lookup(session, phone)) }
+                        background(reply, session) { lookupMap(Api.lookup(SessionTokens(this).valid(session), phone)) }
                     }
-                    "rows" -> {
+                    "rows", "detail" -> {
                         val session = requireNotNull(store.read())
                         val path = Endpoint.path(requireNotNull(call.argument("kind")), requireNotNull(call.argument("id")),
-                            requireNotNull(call.argument("action")), call.argument<Int>("offset") ?: 0)
-                        background(reply, session) { jsonValue(Api.request(session.origin, path, session.token)) }
+                            requireNotNull(call.argument("action")), call.argument<Int>("offset") ?: 0, if (call.method == "detail") requireNotNull(call.argument("item")) else null)
+                        background(reply, session) { jsonValue(Api.request(session.origin, path, SessionTokens(this).valid(session).token)) }
                     }
                     "login" -> {
                         check(!loginBusy)
@@ -140,11 +142,10 @@ class MainActivity : FlutterActivity() {
         helper.enabled = false; AssistService.clear(); stopService(Intent(this, AssistService::class.java)); helper.report("stopped")
         getSystemService(NotificationManager::class.java).cancel(2)
     }
-    private fun ready() = Settings.canDrawOverlays(this) && getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING)
+    private fun ready() = checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED && Settings.canDrawOverlays(this) && getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING)
     private fun snapshot(consumeSelection: Boolean = false): Map<String, Any?> {
         val session = store.read()
         val manager = getSystemService(NotificationManager::class.java)
-        val selected = if (consumeSelection) AssistService.takeSelection() else null
         return mapOf("platform" to "android", "session" to session?.let { mapOf("origin" to it.origin, "organization" to it.organization) },
             "overlayAttached" to AssistService.overlayAttached(), "enabled" to helper.enabled, "running" to AssistService.running(), "role" to getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_SCREENING),
             "roleAvailable" to getSystemService(RoleManager::class.java).isRoleAvailable(RoleManager.ROLE_CALL_SCREENING),
@@ -152,17 +153,17 @@ class MainActivity : FlutterActivity() {
             "notifications" to (manager.areNotificationsEnabled() && manager.getNotificationChannel("assist-status")?.importance != NotificationManager.IMPORTANCE_NONE),
             "lastCallTime" to helper.lastCallTime(), "status" to helper.status(), "statusTime" to helper.statusTime(), "country" to helper.region(), "countryOverride" to helper.regionOverride,
             "loginBusy" to loginBusy, "current" to AssistService.calls.result(session)?.let { lookupMap(it) },
-            "selection" to selected?.let { partnerMap(it) }, "selectedAction" to (if (selected != null) AssistService.takeAction() else null))
+            "phoneState" to (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED))
     }
     private fun background(reply: MethodChannel.Result, session: Session, task: () -> Any?) {
         val request = generation
         worker.execute {
             try {
                 val value = task()
-                runOnUiThread { if (!isDestroyed && request == generation && store.read() == session) reply.success(value) else reply.error("cancelled", null, null) }
+                runOnUiThread { if (!isDestroyed && request == generation && session.sameLogin(store.read())) reply.success(value) else reply.error("cancelled", null, null) }
             } catch (error: Exception) {
                 runOnUiThread {
-                    if (error is ApiFailure && error.status == 401 && store.read() == session) { disable(); store.clear(); helper.report("session_expired") }
+                    if (error is ApiFailure && error.status == 401 && session.sameLogin(store.read())) { disable(); store.clear(); helper.report("session_expired") }
                     reply.error(errorCode(error), null, null)
                 }
             }

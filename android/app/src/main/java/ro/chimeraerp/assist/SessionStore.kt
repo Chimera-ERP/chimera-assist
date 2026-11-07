@@ -11,7 +11,12 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-data class Session(val origin: String, val token: String, val organization: String)
+data class Session(val origin: String, val token: String, val organization: String, val loginId: String = token,
+    val refreshToken: String? = null, val expiresAt: Long = Long.MAX_VALUE,
+    val authority: String? = null, val orgId: String? = null, val subject: String? = null,
+    val configuration: String? = null) {
+    fun sameLogin(other: Session?) = other != null && origin == other.origin && loginId == other.loginId
+}
 
 /** Keystore-encrypted session; no password, phone history or business cache. */
 class SessionStore(context: Context) {
@@ -38,17 +43,26 @@ class SessionStore(context: Context) {
             JSONObject(String(cipher.doFinal(data.copyOfRange(12, data.size)), Charsets.UTF_8))
         }
     } catch (_: Exception) { check(prefs.edit().remove(name).commit()); null }
-    @Synchronized fun save(session: Session) = write("browser-session", JSONObject().put("origin", session.origin)
-        .put("token", session.token).put("organization", session.organization))
-    @Synchronized fun read(): Session? = readJson("browser-session")?.let {
-        Session(Endpoint.origin(it.getString("origin")), it.getString("token"), it.getString("organization"))
+    fun save(session: Session) = synchronized(lock) { write("browser-session", JSONObject().put("origin", session.origin)
+        .put("token", session.token).put("organization", session.organization).put("loginId",session.loginId)
+        .put("refreshToken",session.refreshToken).put("expiresAt",session.expiresAt).put("authority",session.authority)
+        .put("orgId",session.orgId).put("subject",session.subject).put("configuration",session.configuration)) }
+    fun read(): Session? = synchronized(lock) { readJson("browser-session")?.let {
+        Session(Endpoint.origin(it.getString("origin")), it.getString("token"), it.getString("organization"),
+            it.optString("loginId",it.getString("token")), it.nullable("refreshToken"),it.optLong("expiresAt",Long.MAX_VALUE),
+            it.nullable("authority"),it.nullable("orgId"),it.nullable("subject"),it.nullable("configuration"))
+    } }
+    fun replace(expected: Session, next: Session): Boolean = synchronized(lock) {
+        if (!expected.sameLogin(read())) false else { save(next); true }
     }
-    @Synchronized fun begin(pending: PendingLogin) { clear(); write("browser-pending", pending.json()) }
+    private fun JSONObject.nullable(key: String): String? = if (isNull(key)) null else getString(key)
+    fun begin(pending: PendingLogin) = synchronized(lock) { clear(); write("browser-pending", pending.json()) }
     /** Consume locally before exchange; cancelled/replayed returns cannot revive a session. */
-    @Synchronized fun takePending(): PendingLogin? {
+    fun takePending(): PendingLogin? = synchronized(lock) {
         val json = readJson("browser-pending")
         check(prefs.edit().remove("browser-pending").commit())
-        return json?.let(PendingLogin::from)
+        json?.let(PendingLogin::from)
     }
-    @Synchronized fun clear() { check(prefs.edit().clear().commit()) }
+    fun clear() = synchronized(lock) { check(prefs.edit().clear().commit()) }
+    companion object { private val lock = Any() }
 }

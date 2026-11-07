@@ -1,6 +1,12 @@
 package ro.chimeraerp.assist
 
 import android.app.*
+import android.Manifest
+import android.content.pm.PackageManager
+import android.telecom.TelecomManager
+import android.telephony.TelephonyManager
+import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executors
 import android.content.*
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -20,15 +26,40 @@ class AssistService : Service() {
     private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS, ArrayBlockingQueue(1), ThreadPoolExecutor.DiscardOldestPolicy())
     private var generation = 0
     private var overlay: View? = null
+    private var panelSurface: PanelSurface? = null
+    private var panelContainer: View? = null
+    private var panelHeight = 310
+    private var expanded = false
+    private var demo = false
+    private var bubbleX = 12
+    private var bubbleY = 0
+    private val dataWorker = Executors.newSingleThreadExecutor()
+    internal var panelFactory: () -> PanelSurface = { FlutterPanel(this, workspace) }
+    internal var isCallActive: () -> Boolean = {
+        if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) false
+        else try { getSystemService(TelecomManager::class.java).isInCall } catch (_: SecurityException) { false }
+    }
+    private val workspace by lazy { WorkspaceBridge(readSession, { state.status() }, { demo }, ::minimize, ::resizePanel,
+        ::readBackground, { session, path -> MainActivity.jsonValue(Api.request(session.origin, path, SessionTokens(this).valid(session).token)) }) }
+    private val maintenance = object : Runnable {
+        override fun run() {
+            updateCallState()
+            if (!demo && calls.current(readSession()) == null) dismiss()
+            handler.postDelayed(this, 2000)
+        }
+    }
+    private val phoneReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) { updateCallState() }
+    }
     internal var readSession: () -> Session? = { SessionStore(this).read() }
-    internal var lookupRequest: (Session, String) -> Lookup = Api::lookup
+    internal var lookupRequest: (Session, String) -> Lookup = { session, phone -> Api.lookup(SessionTokens(this).valid(session),phone) }
     private val windows by lazy { getSystemService(WindowManager::class.java) }
     private val state by lazy { HelperState(this) }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_SCREEN_OFF) { dismiss(); return }
             val session = readSession()
-            calls.result(session)?.takeIf { it.partners.isNotEmpty() }?.let { bubble(it) }
+            calls.result(session)?.takeIf { it.partners.isNotEmpty() }?.let { render(it) }
         }
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -41,17 +72,22 @@ class AssistService : Service() {
         startForeground(1, notification(this, R.string.notification))
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_USER_PRESENT) }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED) else registerReceiver(receiver, filter)
+        val phoneFilter = IntentFilter(TelephonyManager.ACTION_PHONE_STATE_CHANGED)
+        // Protected system broadcast; no number is read. Telecom gives aggregate state across SIMs.
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(phoneReceiver, phoneFilter, RECEIVER_EXPORTED) else registerReceiver(phoneReceiver, phoneFilter)
+        handler.post(maintenance)
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "stop" || readSession() == null) {
             state.enabled = false; calls.clear(); state.report("stopped"); stopSelf(); return START_NOT_STICKY
         }
         when (intent?.action) {
-            "test-overlay" -> { generation++; calls.clear(); report("testing", R.string.test_success); bubble(null) }
+            "test-overlay" -> { demo = true; report("testing", R.string.test_success); bubble(null) }
             "lookup" -> intent.getStringExtra("phone")?.let { phone -> readSession()?.let { lookup(calls.begin(phone, state.region(), it)) } }
             else -> {
                 val event = calls.current(readSession())
                 if (event != null && calls.result(event.session) == null) lookup(event)
+                else if (event != null) calls.result(event.session)?.let { render(it) }
                 else if (state.enabled) report("ready", R.string.notification)
             }
         }
@@ -61,7 +97,8 @@ class AssistService : Service() {
     override fun onDestroy() {
         if (active?.get() === this) active = null
         generation++; dismiss(); handler.removeCallbacksAndMessages(null)
-        unregisterReceiver(receiver); worker.shutdownNow(); super.onDestroy()
+        unregisterReceiver(receiver); unregisterReceiver(phoneReceiver); worker.shutdownNow(); dataWorker.shutdownNow()
+        panelSurface?.destroy(); panelSurface = null; super.onDestroy()
     }
     private fun locked() = getSystemService(KeyguardManager::class.java).isKeyguardLocked
     private fun report(code: String, message: Int) {
@@ -70,7 +107,8 @@ class AssistService : Service() {
     }
     private fun lookup(event: CallContext.Event) {
         val request = ++generation
-        selection = null; selectedAction = null; dismiss()
+        demo = false; updateCallState(); expanded = calls.expanded(readSession())
+        if (!expanded) dismiss()
         report("looking", R.string.identifying)
         worker.execute {
             try {
@@ -78,12 +116,11 @@ class AssistService : Service() {
                 val result = lookupRequest(event.session, number)
                 handler.post {
                     if (request != generation || active?.get() !== this || !calls.complete(event, readSession(), result)) return@post
-                    if (result.partners.isEmpty()) report("no_match", R.string.no_match)
+                    if (result.partners.isEmpty()) { dismiss(); report("no_match", R.string.no_match) }
                     else {
                         report("matched", R.string.match_notification)
-                        if (locked()) state.report("locked") else bubble(result)
+                        if (locked()) state.report("locked") else render(result)
                     }
-                    handler.postDelayed({ if (request == generation) { calls.clear(); dismiss(); if (state.enabled) report("ready", R.string.notification) } }, 5 * 60 * 1000L)
                 }
             } catch (error: Exception) {
                 handler.post {
@@ -102,14 +139,14 @@ class AssistService : Service() {
             }
         }
     }
-    private fun dismiss() { overlay?.let { try { windows.removeView(it) } catch (_: IllegalArgumentException) {} }; overlay = null }
+    private fun dismiss() { panelSurface?.visible(false); overlay?.let { try { windows.removeView(it) } catch (_: IllegalArgumentException) {} }; overlay = null }
     private fun attach(view: View, width: Int, height: Int) {
         dismiss()
         if (locked()) { state.report("locked"); return }
         if (!Settings.canDrawOverlays(this)) { state.report("overlay_denied"); return }
         val params = WindowManager.LayoutParams(width, height, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_SECURE,
-            PixelFormat.TRANSLUCENT).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL; x = dp(12) }
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or WindowManager.LayoutParams.FLAG_SECURE or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.TRANSLUCENT).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL; x = dp(bubbleX); y = bubbleY }
         try { windows.addView(view, params); overlay = view; state.report("overlay_shown") }
         catch (_: RuntimeException) { state.report("overlay_failed") }
     }
@@ -119,8 +156,7 @@ class AssistService : Service() {
             setPadding(dp(8), dp(8), dp(8), dp(8)); contentDescription = getString(R.string.open_partner)
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.WHITE); setStroke(dp(2), Color.rgb(81, 68, 211)) }
             clipToOutline = true; elevation = dp(8).toFloat()
-            setOnClickListener { panel(result) }
-            setOnLongClickListener { dismiss(); true }
+            setOnClickListener { expand() }
         }
         var downX = 0f; var downY = 0f; var initialX = 0; var initialY = 0; var dragged = false
         button.setOnTouchListener { view, event ->
@@ -138,6 +174,7 @@ class AssistService : Service() {
                         params.x = (initialX - dx.toInt()).coerceIn(0, (resources.displayMetrics.widthPixels - dp(64)).coerceAtLeast(0))
                         val limit = (resources.displayMetrics.heightPixels / 2 - dp(72)).coerceAtLeast(0)
                         params.y = (initialY + dy.toInt()).coerceIn(-limit, limit)
+                        bubbleX = (params.x / resources.displayMetrics.density).toInt(); bubbleY = params.y
                         if (overlay === view) windows.updateViewLayout(view, params)
                     }
                     dragged
@@ -148,50 +185,74 @@ class AssistService : Service() {
         }
         attach(button, dp(64), dp(64))
     }
-    private fun panel(result: Lookup?) {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(12))
-            background = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(Color.WHITE) }
-        }
-        fun title(text: String) { box.addView(TextView(this).apply { this.text = text; textSize = 18f; setTextColor(Color.BLACK); setPadding(0, dp(6), 0, dp(6)) }) }
-        fun button(text: String, action: () -> Unit) { box.addView(Button(this).apply { this.text = text; isAllCaps = false; setOnClickListener { action() } }) }
-        title(getString(R.string.app_name))
-        if (result == null) {
-            title(getString(R.string.test_success))
-        } else if (result.partners.size == 1) {
-            val partner = result.partners.single()
-            title(partner.name)
-            if (partner.actions.isEmpty()) title(getString(R.string.no_actions))
-            partner.actions.forEach { action -> button(getString(MainActivity.actionLabel(action))) { open(partner, action) } }
-        } else {
-            title(getString(R.string.choose_partner))
-            result.partners.forEach { partner -> button(partner.name + " · " + getString(if (partner.kind == "supplier") R.string.supplier else R.string.client)) { open(partner, null) } }
-        }
-        if (result?.hasMore == true) title(getString(R.string.more_matches))
-        button(getString(R.string.collapse)) { bubble(result) }
-        button(getString(R.string.close)) { dismiss() }
-        val scroll = ScrollView(this).apply { addView(box) }
-        val metrics = resources.displayMetrics
-        attach(scroll, minOf(dp(320), metrics.widthPixels - dp(24)), minOf(dp(420), metrics.heightPixels - dp(100)))
-    }
-    private fun open(partner: Partner, action: String?) {
+    private fun render(result: Lookup) { if (expanded) expand() else bubble(result) }
+    internal fun expand() {
         if (locked()) { dismiss(); return }
-        selection = partner
-        selectedAction = action
-        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-        dismiss()
+        expanded = true
+        if (!demo) calls.expanded(readSession(),true)
+        if (panelSurface == null) panelSurface = panelFactory()
+        if (panelContainer == null) {
+            panelContainer = object : FrameLayout(this) {
+                override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                    if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) { minimize(); return true }
+                    return super.dispatchTouchEvent(event)
+                }
+            }.apply { addView(panelSurface!!.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)) }
+        }
+        if (overlay !== panelContainer) {
+            val metrics = resources.displayMetrics
+            attach(panelContainer!!, minOf(dp(392), metrics.widthPixels - dp(24)), minOf(dp(panelHeight), metrics.heightPixels - dp(96)))
+            resizePanel(panelHeight)
+        }
+        if (overlay === panelContainer) panelSurface?.visible(true)
+    }
+    internal fun minimize() {
+        expanded = false
+        if (!demo) calls.expanded(readSession(),false)
+        if (demo) bubble(null) else calls.result(readSession())?.let { bubble(it) } ?: dismiss()
+    }
+    private fun resizePanel(height: Int) {
+        panelHeight = height
+        val view = overlay?.takeIf { it === panelContainer } ?: return
+        val params = view.layoutParams as WindowManager.LayoutParams
+        params.height = minOf(dp(height), resources.displayMetrics.heightPixels - dp(96))
+        params.gravity = Gravity.END or Gravity.TOP
+        val metrics = resources.displayMetrics
+        val maxHeight = minOf(dp(680),metrics.heightPixels-dp(96))
+        params.y = (metrics.heightPixels/2+bubbleY-dp(32)).coerceIn(dp(24),maxOf(dp(24),metrics.heightPixels-maxHeight-dp(48)))
+        params.x = dp(12)
+        windows.updateViewLayout(view,params)
+    }
+    private fun updateCallState() { calls.callState(try { isCallActive() } catch (_: SecurityException) { false }) }
+    private fun readBackground(reply: MethodChannel.Result, session: Session, read: () -> Any?) {
+        val event = calls.current(session)
+        dataWorker.execute {
+            try {
+                val value = read()
+                handler.post {
+                    if (active?.get() === this && session.sameLogin(readSession()) && calls.current(session) == event) reply.success(value)
+                    else reply.error("cancelled",null,null)
+                }
+            } catch (error: Exception) {
+                handler.post {
+                    if (session.sameLogin(readSession()) && error is ApiFailure && error.status == 401) {
+                        SessionStore(this).clear(); calls.clear(); state.enabled = false; dismiss()
+                        report("session_expired",R.string.session_expired); stopSelf()
+                    }
+                    reply.error(if (error is ApiFailure) when(error.status) {401 -> "session_expired";403 -> "forbidden";404 -> "not_found";else -> "network_error"} else "network_error",null,null)
+                }
+            }
+        }
     }
     companion object {
         val calls = CallContext({ SystemClock.elapsedRealtime() })
         private var active: WeakReference<AssistService>? = null
-        private var selection: Partner? = null
-        private var selectedAction: String? = null
         fun receive(context: Context, phone: String, region: String? = HelperState(context).region()) {
             val state = HelperState(context)
             state.report("received")
             if (!state.enabled) { state.report("stopped"); return }
             val session = SessionStore(context).read() ?: run { state.report("session_expired"); return }
-            val event = calls.begin(phone, region, session)
+            val event = try { calls.begin(phone, region, session) } catch (_: IllegalArgumentException) { state.report("invalid_phone"); return }
             val service = active?.get()
             if (service != null) service.handler.post { service.lookup(event) }
             else if (state.enabled) {
@@ -204,11 +265,10 @@ class AssistService : Service() {
                 }
             } else state.report("stopped")
         }
-        fun clear() { calls.clear(); selection = null; selectedAction = null }
+        fun clear() { calls.clear(); active?.get()?.dismiss() }
         fun running() = active?.get() != null
         fun overlayAttached() = active?.get()?.overlay != null
-        fun takeSelection(): Partner? = selection.also { selection = null }
-        fun takeAction(): String? = selectedAction.also { selectedAction = null }
+        fun openWorkspace() { active?.get()?.expand() }
         private fun notifications(context: Context) {
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel("assist-status", context.getString(R.string.app_name), NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(null, null) })

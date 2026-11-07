@@ -1,26 +1,80 @@
 package ro.chimeraerp.assist
 
-/** One short-lived context, in memory only. A new call/session always supersedes old work. */
-class CallContext(private val clock: () -> Long, private val ttl: Long = 5 * 60 * 1000L) {
+/** Volatile caller workspaces, scoped to one login. No phone history is persisted. */
+class CallContext(private val clock: () -> Long, private val ttl: Long = 30 * 60 * 1000L) {
     data class Event(val sequence: Long, val phone: String, val region: String?, val session: Session, val at: Long)
+    data class Cursor(val kind: String? = null, val partner: String? = null, val action: String? = null,
+                      val offset: Int = 0, val item: String? = null, val detailOffset: Int = 0,
+                      val scroll: Double = 0.0, val detailScroll: Double = 0.0)
+    private data class Entry(val id: Long, var event: Event, var lastCall: Long,
+                             var result: Lookup? = null, var cursor: Cursor = Cursor(), var expanded: Boolean = false)
+    private val entries = linkedMapOf<String, Entry>()
+    private val ongoing = mutableSetOf<String>()
     private var sequence = 0L
-    private var event: Event? = null
-    private var result: Lookup? = null
+    private var selected: String? = null
+    private var identity: Session? = null
+    private var inCall = false
 
-    @Synchronized fun begin(phone: String, region: String?, session: Session): Event {
-        result = null
-        return Event(++sequence, phone, region, session, clock()).also { event = it }
-    }
-    @Synchronized fun current(session: Session?): Event? {
-        val item = event ?: return null
-        if (session != item.session || clock() - item.at !in 0 until ttl) { clear(); return null }
-        return item
-    }
-    @Synchronized fun complete(item: Event, session: Session?, lookup: Lookup): Boolean {
-        if (current(session) != item) return false
-        result = lookup
+    private fun scope(session: Session?): Boolean {
+        if (session == null || identity?.sameLogin(session) != true) { clear(); return false }
+        prune()
         return true
     }
-    @Synchronized fun result(session: Session?): Lookup? = if (current(session) != null) result else null
-    @Synchronized fun clear() { sequence++; event = null; result = null }
+    private fun prune() {
+        val now = clock()
+        entries.entries.removeAll { (key, entry) -> key !in ongoing && now - entry.lastCall !in 0 until ttl }
+        if (!entries.containsKey(selected)) selected = null
+    }
+    @Synchronized fun begin(phone: String, region: String?, session: Session): Event {
+        if (identity?.sameLogin(session) != true) { clear(); identity = session }
+        prune()
+        val canonical = PhoneNumbers.canonical(phone, region)
+        val event = Event(++sequence, canonical, region, session, clock())
+        val entry = entries[canonical]
+        if (entry == null) entries[canonical] = Entry(sequence, event, clock(), expanded = entries[selected]?.expanded ?: false)
+        else { entry.event = event; entry.lastCall = clock() }
+        selected = canonical
+        if (inCall) ongoing.add(canonical)
+        return event
+    }
+    /** Aggregate Telecom state includes ringing, active and held calls across SIMs. */
+    @Synchronized fun callState(active: Boolean) {
+        if (active) {
+            if (!inCall) selected?.takeIf { clock() - (entries[it]?.lastCall ?: Long.MIN_VALUE) in 0..20_000 }?.let { ongoing.add(it) }
+        } else if (inCall) {
+            ongoing.forEach { entries[it]?.lastCall = clock() }
+            ongoing.clear()
+        }
+        inCall = active
+        prune()
+    }
+    @Synchronized fun current(session: Session?): Event? = if (scope(session)) entries[selected]?.event else null
+    @Synchronized fun complete(item: Event, session: Session?, lookup: Lookup): Boolean {
+        if (current(session) != item) return false
+        val entry = entries[selected] ?: return false
+        entry.result = lookup
+        val cursor = entry.cursor
+        val partner = lookup.partners.find { it.kind == cursor.kind && it.id == cursor.partner }
+        if (partner == null || cursor.action != null && cursor.action !in partner.actions) entry.cursor = Cursor()
+        return true
+    }
+    @Synchronized fun result(session: Session?): Lookup? = if (scope(session)) entries[selected]?.result else null
+    @Synchronized fun id(session: Session?): Long? = if (scope(session)) entries[selected]?.id else null
+    @Synchronized fun cursor(session: Session?): Cursor = if (scope(session)) entries[selected]?.cursor ?: Cursor() else Cursor()
+    @Synchronized fun navigate(session: Session?, id: Long, cursor: Cursor): Boolean {
+        if (!scope(session)) return false
+        val entry = entries[selected]?.takeIf { it.id == id } ?: return false
+        val partner = entry.result?.partners?.find { it.kind == cursor.kind && it.id == cursor.partner } ?: return false
+        require(cursor.action == null || cursor.action in partner.actions)
+        require(cursor.offset in 0..10000 && cursor.detailOffset in 0..10000)
+        require(cursor.item == null || cursor.item.matches(Regex("[A-Za-z0-9_-]{1,100}")))
+        require(cursor.scroll.isFinite() && cursor.scroll in 0.0..1000000.0 && cursor.detailScroll.isFinite() && cursor.detailScroll in 0.0..1000000.0)
+        entry.cursor = cursor
+        return true
+    }
+    @Synchronized fun expanded(session: Session?): Boolean = if (scope(session)) entries[selected]?.expanded == true else false
+    @Synchronized fun expanded(session: Session?, value: Boolean) { if (scope(session)) entries[selected]?.expanded = value }
+    @Synchronized fun clear() {
+        sequence++; entries.clear(); ongoing.clear(); selected = null; identity = null; inCall = false
+    }
 }

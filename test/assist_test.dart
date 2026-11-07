@@ -40,6 +40,9 @@ Future<void> tap(WidgetTester tester, String text) async {
     300,
     scrollable: find.byType(Scrollable).first,
   );
+  await tester.pumpAndSettle();
+  await Scrollable.ensureVisible(tester.element(target), alignment: 0.5);
+  await tester.pumpAndSettle();
   await tester.tap(target);
   await tester.pumpAndSettle();
 }
@@ -111,7 +114,7 @@ void main() {
       await tap(tester, 'Find in Chimera');
       await tap(tester, 'Furnizor demonstrativ · Supplier');
       await tap(tester, 'Invoices');
-      expect(find.text('No records available.'), findsOneWidget);
+      expect(find.text('No records.'), findsOneWidget);
       final i = bridge.calls.indexOf('rows');
       expect(bridge.args[i], {
         'kind': 'supplier',
@@ -156,32 +159,28 @@ void main() {
       expect(find.textContaining('Numărul nu corespunde'), findsOneWidget);
     },
   );
-  testWidgets('overlay action waits for an in-flight manual lookup', (
-    tester,
-  ) async {
-    final bridge = FakeBridge()..pending = Completer<Object?>();
-    await mount(tester, bridge);
-    await tester.scrollUntilVisible(
-      find.text('Caută în Chimera'),
-      350,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('Caută în Chimera'));
-    await tester.pump();
-    bridge.state['selection'] = objects(
-      PreviewAssistBridge.matches['partners'],
-    ).single;
-    bridge.state['selectedAction'] = 'invoices';
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump();
-    expect(bridge.calls, isNot(contains('rows')));
-    bridge.pending!.complete(PreviewAssistBridge.matches);
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
-    expect(bridge.calls, contains('rows'));
-    expect(find.text('Nu există înregistrări disponibile.'), findsOneWidget);
-  });
+  testWidgets(
+    'new call leaves manual lookup in place and opens only the floating panel on request',
+    (tester) async {
+      final bridge = FakeBridge()..pending = Completer<Object?>();
+      await mount(tester, bridge);
+      await tester.scrollUntilVisible(
+        find.text('Caută în Chimera'),
+        350,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Caută în Chimera'));
+      await tester.pump();
+      bridge.state['current'] = PreviewAssistBridge.matches;
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(bridge.calls, isNot(contains('rows')));
+      bridge.pending!.complete(PreviewAssistBridge.matches);
+      await tester.pumpAndSettle();
+      expect(find.text('Parteneri'), findsOneWidget);
+      expect(bridge.calls, isNot(contains('rows')));
+    },
+  );
   testWidgets(
     'native boundary does not return fake success on an unsupported platform',
     (tester) async {

@@ -11,7 +11,7 @@
       "discovery": "declared-script",
       "runner": "gradle",
       "level": "integration",
-      "behavior": "Android15 simulated service: real overlay attachment, refusal diagnostics, canonical lookup, locked/unlocked context, sticky opt-in and network failure",
+      "behavior": "Android15 simulated service: real overlay attachment, refusal diagnostics, canonical lookup, locked/unlocked context, sticky opt-in and network failure; outside-tap minimization retains one embedded panel without launching an activity",
       "ruleIds": [],
       "scenarioIds": [],
       "command": "./gradlew :app:testDebugUnitTest",
@@ -65,7 +65,7 @@
       "discovery": "declared-script",
       "runner": "gradle",
       "level": "unit",
-      "behavior": "Pending call recovery, stale reply/session rejection and bounded in-memory context",
+      "behavior": "Canonical per-caller cursor restoration, active-call retention and 30-minute inactivity expiry, stale reply and login boundaries",
       "ruleIds": [],
       "scenarioIds": [],
       "command": "./gradlew :app:testDebugUnitTest",
@@ -111,6 +111,24 @@
       ]
     },
     {
+      "id": "chimera-assist:511c254868de3adf4b28",
+      "repository": "chimera-assist",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/SessionTokensTest.kt",
+      "title": "SessionTokensTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "unit",
+      "behavior": "Concurrent renewal runs once; logout and changed login cannot be overwritten or borrowed by stale requests",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Injected renewal boundary; real provider rotation covered in Auth integration, physical device acceptance separate"
+      ]
+    },
+    {
       "id": "chimera-assist:59be1a22b0ea414c0e06",
       "repository": "chimera-assist",
       "source": "test/assist_test.dart",
@@ -126,6 +144,25 @@
       "metadataStatus": "documented",
       "limitations": [
         "Synthetic native bridge; real browser redirect, telephony and overlay acceptance separate",
+        "Native file inventory; individual outcomes require Flutter reporter evidence."
+      ]
+    },
+    {
+      "id": "chimera-assist:cc66d69b5f3f15a8bcfe",
+      "repository": "chimera-assist",
+      "source": "test/workspace_test.dart",
+      "title": "workspace_test.dart",
+      "line": 1,
+      "discovery": "native-file",
+      "runner": "flutter",
+      "level": "component",
+      "behavior": "Inline lists/details/pagination, caller A-B-A restoration, stale responses, minimized context, loading/empty/error and large-text layout",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "flutter test",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Synthetic native bridge; actual Android WindowManager and physical Telecom acceptance separate",
         "Native file inventory; individual outcomes require Flutter reporter evidence."
       ]
     },

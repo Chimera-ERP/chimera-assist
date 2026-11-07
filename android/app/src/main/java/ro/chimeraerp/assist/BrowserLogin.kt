@@ -111,7 +111,9 @@ class BrowserLogin(private val context: Context) {
                     // AppAuth validates issuer, audience, expiry and nonce over the pinned HTTPS token endpoint.
                     val claims = JSONObject(String(Base64.decode(requireNotNull(token.idToken).split('.')[1], Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING), Charsets.UTF_8))
                     require(claims.getString("org") == resolved.orgId)
-                    done(Session(resolved.origin, token.accessToken!!, resolved.organization), null)
+                    done(Session(resolved.origin, token.accessToken!!, resolved.organization, java.util.UUID.randomUUID().toString(),
+                        token.refreshToken, token.accessTokenExpirationTime ?: System.currentTimeMillis(),resolved.authority,
+                        resolved.orgId, claims.getString("sub"),resolved.request.configuration.toJsonString()), null)
                 } catch (failure: Exception) { done(null, failure) }
             }
         } catch (error: Exception) { done(null, error) }

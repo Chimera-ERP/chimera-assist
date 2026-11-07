@@ -11,9 +11,10 @@ object Endpoint {
             (uri.port == -1 || uri.port in 1..65535))
         return uri.toASCIIString().trimEnd('/')
     }
-    fun path(kind: String, id: String, action: String, offset: Int): String {
+    fun path(kind: String, id: String, action: String, offset: Int, item: String? = null): String {
         require(kind in listOf("supplier", "client") && action in listOf("invoices", "payments", "products"))
         require(id.matches(Regex("[A-Za-z0-9_-]{1,100}")) && offset in 0..10000)
-        return "/api/assist/partners/$kind/$id/$action?offset=$offset"
+        require(item == null || item.matches(Regex("[A-Za-z0-9_-]{1,100}")))
+        return "/api/assist/partners/$kind/$id/$action" + (item?.let { "/$it" } ?: "") + "?offset=$offset"
     }
 }

@@ -4,6 +4,10 @@ import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.widget.FrameLayout
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -80,5 +84,36 @@ class AssistServiceTest {
         assertNull(AssistService.calls.result(session))
         assertEquals(Service.START_NOT_STICKY,service.onStartCommand(Intent().setAction("stop"),0,3))
         assertFalse(HelperState(service).enabled)
+    }
+
+    @Test fun outsideTouchMinimizesWithoutLaunchingActivityOrDiscardingCallerNavigation() {
+        var created=0
+        val content=FrameLayout(service)
+        service.panelFactory={ created++; object:PanelSurface {
+            override val view:View=content
+            override fun visible(value:Boolean) {}
+            override fun destroy() {}
+        } }
+        service.lookupRequest={_,_->match}
+        service.onStartCommand(Intent().setAction("lookup").putExtra("phone","+442079460123"),0,1)
+        await { AssistService.calls.result(session)!=null }
+        val id=AssistService.calls.id(session)!!
+        val cursor=CallContext.Cursor("supplier","synthetic","invoices",25,"invoice_1",0,99.0,0.0)
+        AssistService.calls.navigate(session,id,cursor)
+        service.expand()
+        val container=content.parent as View
+        val params=container.layoutParams as WindowManager.LayoutParams
+        assertTrue(params.flags and WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH != 0)
+        assertTrue(params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL != 0)
+        assertTrue(params.width < service.resources.displayMetrics.widthPixels)
+        val event=MotionEvent.obtain(0,0,MotionEvent.ACTION_OUTSIDE,0f,0f,0)
+        container.dispatchTouchEvent(event);event.recycle()
+        assertTrue(AssistService.overlayAttached())
+        assertFalse(AssistService.calls.expanded(session))
+        assertEquals(cursor,AssistService.calls.cursor(session))
+        service.expand()
+        assertEquals(1,created)
+        assertEquals(cursor,AssistService.calls.cursor(session))
+        assertNull(shadowOf(service).nextStartedActivity)
     }
 }
