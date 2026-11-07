@@ -25,8 +25,9 @@ same certificate and can update in place. Android package: `ro.chimeraerp.assist
 
 The welcome screen defaults to **Chimera Cloud** with a **Log in** button.
 No ERP address is required. Auth opens in the system browser at
-`https://auth.chimeraerp.ro`; its company chooser lists active registered,
-allowlisted ERP hosts and starts the existing tenant login. Auth returns the
+`https://auth.chimeraerp.ro`, which opens the public application at
+`app.chimeraerp.ro` directly. Custom/enterprise organizations and their domains
+are never listed in public Cloud login. Auth returns the
 one-use authorization code directly to Assist.
 
 **Enterprise / Self-hosted** reveals a server-address field. That explicitly
@@ -35,7 +36,7 @@ Assist pins for discovery and token exchange. Users can switch back to Cloud.
 Local credentials and configured enterprise SSO stay in the existing browser
 login page. Assist has no password form, WebView or client secret.
 
-Cloud tenant selection is bound to the initiating state, nonce, S256 challenge
+The Cloud destination is fixed; the request is bound to the initiating state, nonce, S256 challenge
 and an HttpOnly browser cookie. After returning, the app resolves that choice
 once with its original verifier, then uses the standard tenant token endpoint.
 The encrypted request owns all proofs; callback URLs cannot select a tenant or
