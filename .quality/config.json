@@ -94,6 +94,16 @@
       "limitations": [
         "Synthetic native bridge; real browser redirect, telephony and overlay acceptance separate"
       ]
+    },
+    "android/app/src/test/java/ro/chimeraerp/assist/BrowserReturnTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "integration",
+      "behavior": "Launch the real AppAuth redirect receiver with merged Android resources for successful and rejected browser responses; forward unchanged callback to the authorization manager without crashing",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Robolectric API35 activity lifecycle; no real browser, token exchange or physical Nothing Phone acceptance"
+      ]
     }
   },
   "releaseChecks": [

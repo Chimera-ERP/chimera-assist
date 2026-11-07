@@ -53,6 +53,11 @@ AppAuth validates the ID-token issuer/audience/time/nonce using the HTTPS token
 response. Pending PKCE material survives Android activity/process recreation in
 Keystore-encrypted storage; an interrupted token exchange requires a new login.
 
+The Android AppAuth redirect receiver has an explicit translucent AppCompat theme.
+It must not inherit the Flutter activity's platform theme: with the current AndroidX
+dependencies that crashes before either a successful or rejected browser response
+can reach the login handler. Version0.2.1 fixes that browser-return regression.
+
 Sessions and pending requests use separate authenticated AES-GCM envelopes, with
 backup disabled. Passwords, the address book, phone history and business responses
 are not stored. Logout stops the helper and clears the local session and pending
@@ -212,7 +217,9 @@ npm run quality:check
 
 The shared synthetic OIDC runner covers native password/enterprise flows, exact
 redirects, mandatory PKCE, wrong verifier, replay, disabled runtime, tenant and
-revoked-account rejection. Android unit tests cover endpoint/state/expiry bounds;
+revoked-account rejection. Android tests cover endpoint/state/expiry bounds and
+launch the actual AppAuth redirect receiver with merged app resources on simulated
+API35 for both success and error responses, checking forwarding to AppAuth;
 real browser-to-app return, cancellation, process death and OEM browser behavior
 still require an Android device/emulator trial.
 
@@ -247,7 +254,7 @@ npm run quality:check
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 # With the four ASSIST signing environment values supplied securely:
 flutter build apk --release
-gh attestation verify chimera-assist-0.2.0.apk --repo Chimera-ERP/chimera-assist
+gh attestation verify chimera-assist-0.2.1.apk --repo Chimera-ERP/chimera-assist
 ```
 
 An interrupted release remains a draft and must be reconciled before retrying.

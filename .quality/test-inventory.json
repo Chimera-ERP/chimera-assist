@@ -39,6 +39,24 @@
       ]
     },
     {
+      "id": "chimera-assist:d81ce56912a09d523552",
+      "repository": "chimera-assist",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/BrowserReturnTest.kt",
+      "title": "BrowserReturnTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "integration",
+      "behavior": "Launch the real AppAuth redirect receiver with merged Android resources for successful and rejected browser responses; forward unchanged callback to the authorization manager without crashing",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Robolectric API35 activity lifecycle; no real browser, token exchange or physical Nothing Phone acceptance"
+      ]
+    },
+    {
       "id": "chimera-assist:d7cdfd9af347de3e1895",
       "repository": "chimera-assist",
       "source": "android/app/src/test/java/ro/chimeraerp/assist/CallContextTest.kt",

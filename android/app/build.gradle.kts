@@ -16,8 +16,8 @@ android {
         applicationId = "ro.chimeraerp.assist"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.2.0"
+        versionCode = 5
+        versionName = "0.2.1"
         manifestPlaceholders["appAuthRedirectScheme"] = "ro.chimeraerp.assist"
     }
     compileOptions {

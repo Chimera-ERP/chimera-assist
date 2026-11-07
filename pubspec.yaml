@@ -1,7 +1,7 @@
 name: chimera_assist
 description: "Chimera Assist: business context for calls."
 publish_to: 'none'
-version: 0.2.0+4
+version: 0.2.1+5
 
 environment:
   sdk: ^3.12.2
