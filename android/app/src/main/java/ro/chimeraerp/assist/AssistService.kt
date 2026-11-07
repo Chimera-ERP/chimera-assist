@@ -269,6 +269,11 @@ class AssistService : Service() {
     }
     companion object {
         val calls = CallContext({ SystemClock.elapsedRealtime() })
+        internal fun restartBlocked(context: Context) {
+            HelperState(context).report("start_blocked")
+            notifications(context)
+            context.getSystemService(NotificationManager::class.java).notify(2,notification(context,R.string.restart_required))
+        }
         private var active: WeakReference<AssistService>? = null
         fun receive(context: Context, phone: String, region: String? = HelperState(context).region()) {
             val state = HelperState(context)

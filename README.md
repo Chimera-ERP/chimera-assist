@@ -63,18 +63,23 @@ can reach the login handler. Version0.2.1 fixes that browser-return regression.
 
 Sessions and pending requests use separate authenticated AES-GCM envelopes, with
 backup disabled. Passwords, the address book, phone history and business responses
-are not stored. Logout stops the helper and clears the local session and pending
-login; the central browser session remains governed by Auth. The existing Auth
-policy applies: access tokens last15 minutes. Assist alone receives rotating refresh
-tokens bounded by the original eight-hour grant, without offline access or sliding
-extension. Renewal is serialized and atomically saved in Keystore-encrypted storage;
-logout or a changed login cannot be overwritten by an outstanding renewal. Replay
-and current account/tenant/federation revocation are checked by Auth. Users upgrading
-an old 0.2.x session must log in once to obtain renewal. An explicit upgrade message
-explains this instead of treating an access token without expiry metadata as infinite.
-Temporary network failures retain the session and permit retry.
-A rejected session stops the helper and requires browser login again; an existing
-central browser session can satisfy that login. Permissions remain server checked.
+are not stored. Assist 0.3.2 keeps sign-in until explicit logout or server-side
+revocation. Auth migration `20261107_assist_persistent_sessions.sql` removes the
+absolute/idle deadline only for registered native Assist grants and refresh tokens,
+independently of the central browser cookie. Access tokens remain15 minutes and
+refresh rotates on every use. Live older grants upgrade on read; expired/revoked
+sessions cannot be revived. Old0.2.x sessions still need one login for renewal.
+Renewal is serialized and atomically saved in Keystore-encrypted storage; logout or
+a changed login cannot be overwritten by an outstanding renewal. Replay and current
+account/tenant/federation eligibility remain checked by Auth. Temporary network
+failure retains the session for retry; rejected authorization requires login again.
+
+Logout immediately stops the helper and atomically removes local session/pending
+login. Its minimal refresh proof is retained in a separately authenticated encrypted
+queue until RFC7009 server revocation succeeds. A network-constrained persisted
+Android job retries offline failures without reactivating the helper or affecting a
+later login. Discovery/revocation endpoints remain pinned to the original issuer.
+Other browser applications stay signed in; the central browser policy is separate.
 
 Setup requests the system caller-ID role and permission to display over other
 apps, plus Phone state to recognize ringing/active/held calls and their end. Only
@@ -83,8 +88,9 @@ permission. Optional Contacts permission lets Android deliver calls from numbers
 phone's address book; the app never queries the address book. Notification
 permission is requested on Android13+. Activation from the visible screen starts
 a user-visible `specialUse` foreground service. A persistent notification provides
-a stop action. There is no boot receiver, default-dialer replacement, call-log
-permission, microphone access, accessibility service or call recording.
+a stop action. A boot/package-update receiver resumes only an enabled, signed-in
+helper with its existing permissions. There is no default-dialer replacement,
+call-log permission, microphone access, accessibility service or call recording.
 
 `CallScreeningService` enqueues the event while Telecom still holds its binding,
 then immediately allows the call in a `finally` block, without waiting for network
@@ -134,7 +140,8 @@ locale. The logo is the existing Chimera artwork copied from Companion's
 
 ## Boundaries and device acceptance
 
-Android10+ (API29), target36. After force-stop or reboot, open Assist to resume the enabled helper. Ordinary
+Android10+ (API29), target36. Reboot/app update restores an enabled signed-in helper
+when Android permits it. After force-stop, open Assist to resume. Ordinary
 system service reclamation can restart the opted-in foreground service; OEM policy
 may still prevent it. A refused background start is reported, never bypassed. Incoming calls only; hidden numbers and non-telephony
 calls are not identified. Offline or unknown callers produce no bubble. One app
@@ -215,7 +222,8 @@ Auth must run the existing standard OIDC provider with `AUTH_OIDC_ENABLED=true`,
 in `AUTH_BROWSER_CLIENT_ORIGINS`, bound to the active organization in `auth.login_hosts`.
 Apply Auth-owned `sql/20261105_assist_browser_login.sql` after the OIDC migration,
 then `sql/20261106_assist_cloud_login.sql`, `sql/20261107_assist_cloud_privacy.sql`
-and `sql/20261107_assist_session_renewal.sql`; fresh Auth init includes them.
+then `sql/20261107_assist_session_renewal.sql` and
+`sql/20261107_assist_persistent_sessions.sql`; fresh Auth init includes them.
 `AUTH_OIDC_WEB_LOGIN_ENABLED=false` may preserve the existing web flow during
 native activation; ERP APIs must still trust the configured OIDC authority. Deploy Auth routes/provider changes with that migration.
 The public `/auth/browser/native-config` and tenant `/auth/oidc/*` routes must reach

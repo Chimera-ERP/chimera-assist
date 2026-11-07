@@ -111,6 +111,24 @@
       ]
     },
     {
+      "id": "chimera-assist:62e05103076ffd887ec0",
+      "repository": "chimera-assist",
+      "source": "android/app/src/test/java/ro/chimeraerp/assist/PersistentSessionTest.kt",
+      "title": "PersistentSessionTest.kt",
+      "line": 1,
+      "discovery": "declared-script",
+      "runner": "gradle",
+      "level": "integration",
+      "behavior": "Encrypted atomic logout, offline revocation retry isolated from later logins, and enabled signed-in helper restart after boot/update",
+      "ruleIds": [],
+      "scenarioIds": [],
+      "command": "./gradlew :app:testDebugUnitTest",
+      "metadataStatus": "documented",
+      "limitations": [
+        "Robolectric API35; real reboot, Android background restrictions and physical call acceptance separate"
+      ]
+    },
+    {
       "id": "chimera-assist:b2f46742a591e3591b2c",
       "repository": "chimera-assist",
       "source": "android/app/src/test/java/ro/chimeraerp/assist/PhoneNumbersTest.kt",

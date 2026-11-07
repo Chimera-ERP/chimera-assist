@@ -113,7 +113,7 @@ class MainActivity : FlutterActivity() {
                                 runOnUiThread {
                                     if (isDestroyed || request != generation) { reply.error("cancelled", null, null); return@runOnUiThread }
                                     try {
-                                        disable(); store.begin(pending)
+                                        disable(); store.begin(pending); LogoutJob.schedule(this)
                                         startActivityForResult(browserLogin.intent(pending), 100)
                                         reply.success(null)
                                     } catch (_: Exception) { loginBusy = false; store.takePending(); reply.error("login_failed", null, null) }
@@ -121,7 +121,7 @@ class MainActivity : FlutterActivity() {
                             } catch (error: Exception) { runOnUiThread { loginBusy = false; reply.error(errorCode(error), null, null) } }
                         }
                     }
-                    "logout" -> { generation++; disable(); store.clear(); helper.clear(); reply.success(snapshot()) }
+                    "logout" -> { generation++; disable(); store.logout(); helper.clear(); LogoutJob.schedule(this); reply.success(snapshot()) }
                     else -> reply.notImplemented()
                 }
             } catch (error: Exception) { reply.error(errorCode(error), null, null) }
@@ -129,6 +129,7 @@ class MainActivity : FlutterActivity() {
     }
     override fun onResume() {
         super.onResume()
+        LogoutJob.schedule(this)
         if (helper.enabled && ready() && store.read() != null && !AssistService.running()) {
             try { startForegroundService(Intent(this, AssistService::class.java)) }
             catch (_: RuntimeException) { helper.report("start_blocked") }

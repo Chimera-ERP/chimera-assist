@@ -138,6 +138,16 @@
       "limitations": [
         "Synthetic preferences; physical browser login acceptance separate"
       ]
+    },
+    "android/app/src/test/java/ro/chimeraerp/assist/PersistentSessionTest.kt": {
+      "standalone": true,
+      "runner": "gradle",
+      "level": "integration",
+      "behavior": "Encrypted atomic logout, offline revocation retry isolated from later logins, and enabled signed-in helper restart after boot/update",
+      "command": "./gradlew :app:testDebugUnitTest",
+      "limitations": [
+        "Robolectric API35; real reboot, Android background restrictions and physical call acceptance separate"
+      ]
     }
   },
   "releaseChecks": [
