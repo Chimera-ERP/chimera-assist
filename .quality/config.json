@@ -8,7 +8,7 @@
     "quality:sql",
     "build"
   ],
-  "localGuidance": "Flutter caller helper with native Android integration. ERP owns business data and SQL; Auth owns browser identity. Preserve PKCE, tenant scope, foreground/lock-screen boundaries and release signing identity. Read README.md. Commands: ./gradlew :app:testDebugUnitTest :app:lintDebug, npm test, npm run quality:check. Real-device and incoming-call acceptance is separate from automated tests.",
+  "localGuidance": "Flutter caller helper with native Android integration. ERP owns business data and SQL; Auth owns browser identity. Preserve PKCE, tenant scope, foreground/lock-screen boundaries and release signing identity. Read README.md. Commands: ./gradlew :app:testDebugUnitTest :app:lintDebug, npm test, npm run quality:check. Real-device and incoming-call acceptance is separate from automated tests.\n\n## Agent skills\n\n### Issue tracker\n\nTrack this repository’s tickets and specs in GitHub Issues. See [Issue tracker](docs/agents/issue-tracker.md).\n\n### Triage labels\n\nUse the five project labels. See [Triage labels](docs/agents/triage-labels.md).\n\n### Domain docs\n\nUse one glossary and one ADR directory for this repository. See [Domain docs](docs/agents/domain.md).",
   "documents": {
     "README.md": {
       "classification": "current",
@@ -29,6 +29,21 @@
       "classification": "current",
       "owner": "Chimera interface maintainers",
       "purpose": "Generated copy of canonical ERP UI/UX requirements for standalone clones"
+    },
+    "docs/agents/issue-tracker.md": {
+      "classification": "current",
+      "owner": "repository maintainers",
+      "purpose": "GitHub issue and specification workflow for this repository"
+    },
+    "docs/agents/triage-labels.md": {
+      "classification": "current",
+      "owner": "repository maintainers",
+      "purpose": "Canonical triage roles and their GitHub label names"
+    },
+    "docs/agents/domain.md": {
+      "classification": "current",
+      "owner": "repository maintainers",
+      "purpose": "Glossary and architecture decision reading conventions"
     }
   },
   "coverage": {

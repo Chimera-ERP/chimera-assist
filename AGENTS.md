@@ -53,3 +53,17 @@ Local hooks can be bypassed. Automated checks validate structure, references and
 ## Repository guidance
 
 Flutter caller helper with native Android integration. ERP owns business data and SQL; Auth owns browser identity. Preserve PKCE, tenant scope, foreground/lock-screen boundaries and release signing identity. Read README.md. Commands: ./gradlew :app:testDebugUnitTest :app:lintDebug, npm test, npm run quality:check. Real-device and incoming-call acceptance is separate from automated tests.
+
+## Agent skills
+
+### Issue tracker
+
+Track this repository’s tickets and specs in GitHub Issues. See [Issue tracker](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Use the five project labels. See [Triage labels](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Use one glossary and one ADR directory for this repository. See [Domain docs](docs/agents/domain.md).

@@ -98,6 +98,27 @@
       "owner": "Chimera mobile maintainers",
       "purpose": "Android app, server prerequisites, release and acceptance contract",
       "originalPath": null
+    },
+    {
+      "path": "docs/agents/domain.md",
+      "classification": "current",
+      "owner": "repository maintainers",
+      "purpose": "Glossary and architecture decision reading conventions",
+      "originalPath": null
+    },
+    {
+      "path": "docs/agents/issue-tracker.md",
+      "classification": "current",
+      "owner": "repository maintainers",
+      "purpose": "GitHub issue and specification workflow for this repository",
+      "originalPath": null
+    },
+    {
+      "path": "docs/agents/triage-labels.md",
+      "classification": "current",
+      "owner": "repository maintainers",
+      "purpose": "Canonical triage roles and their GitHub label names",
+      "originalPath": null
     }
   ]
 }

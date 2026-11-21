@@ -309,3 +309,7 @@ commands/results and acceptance limits. Build only a clean committed source;
 verify the downloaded assets and signing certificate again before announcing the
 release. Do not substitute a debug key, label a local build as Actions-produced,
 or change automatic workflow gates/triggers to bypass exhausted billing.
+
+## Engineering skills
+
+[Issue tracker](docs/agents/issue-tracker.md) · [Triage labels](docs/agents/triage-labels.md) · [Domain docs](docs/agents/domain.md)
